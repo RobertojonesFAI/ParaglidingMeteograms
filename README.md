@@ -17,7 +17,8 @@ forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ─
 
 - **`forecasts/`** is the forecast operator. It pins the
   [`@azohra/meteo.forecast`](https://meteo.azohra.com/docs/forecast/) engine, which downloads
-  NOAA model data, samples it at each launch, derives the soaring quantities, and publishes
+  NOAA and Environment Canada (ECCC) model data, samples it at each launch, derives the
+  soaring quantities, and publishes
   versioned JSON documents. It also fetches the NWS forecast for each launch from
   [api.weather.gov](https://www.weather.gov/documentation/services-web-api).
 - **GitHub Actions** runs both on a schedule. Model builds are idempotent: a tick with no new
@@ -30,7 +31,7 @@ forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ─
 | --- | --- | --- |
 | Check | Every pull request and push | Forecasts: validates the launches, unit tests, engine dry run, live NWS fetch without publishing. Web: unit tests, type checks, sample dataset, site build |
 | Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `models.json`, `site-context.json` |
-| Build forecasts | Every 15 minutes | Builds and publishes the model meteograms |
+| Build forecasts | Every 15 minutes | Builds and publishes the model meteograms (three parallel jobs: NOAA, ECCC Datamart, ECCC mirror) |
 | NWS forecast | Every hour at :20 | Fetches and publishes the NWS forecast for every launch |
 
 ## Launches
@@ -41,14 +42,29 @@ forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ─
 
 ## Models
 
-| Slug | Grid | Horizon | Use |
-| --- | --- | --- | --- |
-| `hrrr-conus` | 3 km | 48 h | Main forecast for today and tomorrow |
-| `rrfs` | 3 km | 84 h | NAM's successor; experimental feed |
-| `gfs` | 25 km | 16 days | Long-range trend only |
-| `hrdps-continental` | 2.5 km | 48 h | Opt-in (`ENABLE_HRDPS=true`); coverage of Boise not yet confirmed |
+| Slug | Provider | Grid | Horizon | Use |
+| --- | --- | --- | --- | --- |
+| `hrrr-conus` | NOAA | 3 km | 48 h | Main forecast for today and tomorrow |
+| `hrdps-continental` | ECCC | 2.5 km | 48 h | Second high-resolution opinion for today and tomorrow |
+| `rrfs` | NOAA | 3 km | 84 h | NAM's successor; experimental feed |
+| `rdps` | ECCC | 10 km | 84 h | Regional model out to day 3 |
+| `gfs` | NOAA | 25 km | 16 days | Long-range trend |
+| `gdps` | ECCC | 15 km | 10 days | Long-range trend, second opinion |
+| `geps` | ECCC | 50 km | 16 days | 21-member ensemble: how much the long range can be trusted |
 
-NAM is deliberately not used: NOAA retires it on 2026-10-06.
+The site lists the models in this order and opens the first one whose run covers the day
+being viewed.
+
+Models deliberately not used:
+
+- **NAM and SREF**: NOAA retires both on 2026-10-06; RRFS replaces NAM.
+- **RAP**: 13 km with the same physics as HRRR, which already covers the launches at 3 km.
+- **ECMWF IFS and AIFS**: the open data does not include surface heat fluxes, so the engine
+  cannot derive thermal strength from them.
+
+ECCC publishes each run as whole-domain files (4 to 14 GB per run for these models), so the
+two ECCC jobs are the slow part of *Build forecasts*. HRDPS is a Canadian domain; Boise is
+inside it, near its southern edge.
 
 A 3 km model sees a smoothed mountain, so its terrain at a launch is usually lower than the
 real launch. The engine measures the real launch elevation separately (`site-context.json`)
@@ -92,7 +108,6 @@ documents; each document's `units` field describes every column.
    | Secret | `R2_SECRET_ACCESS_KEY` | token secret access key |
    | Variable | `R2_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
    | Variable | `METEO_R2_BUCKET` | bucket name |
-   | Variable (optional) | `ENABLE_HRDPS` | `true` to try the Canadian HRDPS model |
 
    Do not set `METEO_DATA_BASE`: with the S3 credentials present, the engine reads its own
    publish state through the authenticated endpoint.
@@ -135,8 +150,8 @@ To add one by hand instead, edit both files in one commit:
    direction the launch faces (`facingDeg`), the wind window half-width, the wind and gust limits
    in mph, a region label and notes.
 3. Commit to `main`. *Publish launches* runs automatically and the site rebuilds. The next *NWS
-   forecast* run (within the hour) and the next new model run (up to 6 hours: a build only
-   publishes when a model's run advances) add the launch's forecasts.
+   forecast* run (within the hour) and each model's next new run (up to 6 hours, 12 for GDPS and
+   GEPS: a build only publishes when a model's run advances) add the launch's forecasts.
 
 The *Check* workflow validates both files on every pull request and push.
 
@@ -178,7 +193,8 @@ pnpm run nws --output data         # fetch the NWS forecast into data/nws/ witho
 pnpm exec meteo forecast build --model hrrr-conus --sites ./sites.json --output data --dry-run
 ```
 
-A real local build needs network access to NOAA's public buckets. Publishing needs the same four
+A real local build needs network access to NOAA's public buckets and ECCC's Datamart
+(`dd.weather.gc.ca`, or its mirror `hpfx.collab.science.gc.ca`). Publishing needs the same four
 variables the workflows use (`METEO_S3_ENDPOINT`, `METEO_R2_BUCKET`, `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`).
 
@@ -202,7 +218,7 @@ which republishes `models.json` for the new engine version.
 - GitHub disables scheduled workflows in a public repository after 60 days without repository
   activity. Re-enable *Build forecasts* and *NWS forecast* from the Actions tab if that happens.
 - Forecast documents are derived from NOAA data, including the National Weather Service
-  forecast (public domain), and, if HRDPS is enabled, from ECCC data under the
+  forecast (public domain), and from ECCC data (HRDPS, RDPS, GDPS, GEPS) under the
   [ECCC Data Server End-use Licence](https://eccc-msc.github.io/open-data/licence/readme_en/).
   Keep the provider attribution wherever the forecasts are shown.
 - These are model forecasts, not observations. They do not replace a pilot's own assessment of

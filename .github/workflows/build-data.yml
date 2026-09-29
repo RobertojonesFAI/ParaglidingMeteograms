@@ -3,17 +3,15 @@
 # run is cheap (one availability probe per model plus one manifest read);
 # uploads only happen when a run actually advances.
 #
-# Models, all NOAA, built in sequence so runs.json is never written by two
-# publishers at once:
-#   hrrr-conus  3 km, 48 h   - the main "today / tomorrow" forecast
-#   rrfs        3 km, 84 h   - NAM's successor (experimental feed)
-#   gfs         25 km, 16 d  - long-range trend
+# One job per provider host, running in parallel; within a job the models run
+# in sequence, lightest first, and each publishes as soon as it finishes:
+#   noaa       (NOAA buckets)          hrrr-conus 3 km 48 h, rrfs 3 km 84 h, gfs 25 km 16 d
+#   eccc-dd    (dd.weather.gc.ca)      rdps 10 km 84 h, gdps 15 km 10 d
+#   eccc-hpfx  (ECCC's faster mirror)  hrdps-continental 2.5 km 48 h, geps 21-member ensemble 16 d
+# ECCC serves whole-domain files (several GB per run), so its jobs are the
+# heavy ones; splitting by host follows the reference operator.
 #
-# HRDPS (ECCC, Canada, 2.5 km) is opt-in: set the repository variable
-# ENABLE_HRDPS to "true" to try it. Its domain may not reach Boise; if it
-# does not, the build fails with an out-of-grid error and publishes nothing.
-#
-# Both jobs are skipped until the METEO_R2_BUCKET repository variable is set.
+# All jobs are skipped until the METEO_R2_BUCKET repository variable is set.
 name: Build forecasts
 
 on:
@@ -32,7 +30,7 @@ jobs:
       group: build-noaa
       cancel-in-progress: false
     # A first run, or a tick where all three models have a new run, downloads
-    # HRRR (~6 min), RRFS (~11 min) and GFS back to back.
+    # HRRR (~6 min), RRFS (~11 min) and GFS (~10 min) back to back.
     timeout-minutes: 90
     defaults:
       run:
@@ -76,29 +74,14 @@ jobs:
       - name: Summary
         if: always()
         env:
-          HRRR: ${{ steps.hrrr.outcome }}
-          RRFS: ${{ steps.rrfs.outcome }}
-          GFS: ${{ steps.gfs.outcome }}
-        run: |
-          {
-            echo "| Model | Result |"
-            echo "| --- | --- |"
-            echo "| HRRR 3 km | $HRRR |"
-            echo "| RRFS 3 km | $RRFS |"
-            echo "| GFS 25 km | $GFS |"
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$HRRR" != "success" ] && [ "$RRFS" != "success" ] && [ "$GFS" != "success" ]; then
-            echo "::error::every model failed this tick"
-            exit 1
-          fi
+          RESULTS: "HRRR 3 km=${{ steps.hrrr.outcome }};RRFS 3 km=${{ steps.rrfs.outcome }};GFS 25 km=${{ steps.gfs.outcome }}"
+        run: scripts/job-summary.sh
 
-  eccc:
+  eccc-dd:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && vars.METEO_R2_BUCKET != '' && vars.ENABLE_HRDPS == 'true'
-    # Shares runs.json with the NOAA job; queue behind it rather than publish concurrently.
-    needs: noaa
+    if: github.ref == 'refs/heads/main' && vars.METEO_R2_BUCKET != ''
     concurrency:
-      group: build-eccc
+      group: build-eccc-dd
       cancel-in-progress: false
     timeout-minutes: 90
     defaults:
@@ -109,7 +92,50 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       METEO_S3_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
-      # ECCC's higher-bandwidth mirror, as the reference operator uses for HRDPS.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          package_json_file: forecasts/package.json
+          cache: true
+          cache_dependency_path: forecasts/pnpm-lock.yaml
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+
+      - name: RDPS 10 km
+        id: rdps
+        continue-on-error: true
+        run: scripts/build-model.sh rdps
+
+      - name: GDPS 15 km
+        id: gdps
+        continue-on-error: true
+        run: scripts/build-model.sh gdps
+
+      - name: Summary
+        if: always()
+        env:
+          RESULTS: "RDPS 10 km=${{ steps.rdps.outcome }};GDPS 15 km=${{ steps.gdps.outcome }}"
+        run: scripts/job-summary.sh
+
+  eccc-hpfx:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && vars.METEO_R2_BUCKET != ''
+    concurrency:
+      group: build-eccc-hpfx
+      cancel-in-progress: false
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: forecasts
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      METEO_S3_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+      # ECCC's higher-bandwidth mirror for the heaviest streams.
       METEO_DATAMART_BASE: https://hpfx.collab.science.gc.ca
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -122,5 +148,19 @@ jobs:
         with:
           node-version: 24
       - run: pnpm install --frozen-lockfile
+
       - name: HRDPS 2.5 km
+        id: hrdps
+        continue-on-error: true
         run: scripts/build-model.sh hrdps-continental
+
+      - name: GEPS ensemble
+        id: geps
+        continue-on-error: true
+        run: scripts/build-model.sh geps
+
+      - name: Summary
+        if: always()
+        env:
+          RESULTS: "HRDPS 2.5 km=${{ steps.hrdps.outcome }};GEPS ensemble=${{ steps.geps.outcome }}"
+        run: scripts/job-summary.sh

@@ -2,9 +2,9 @@
 // charts below them. All forecast data is read from /data at view time, so the
 // page is always as fresh as the dataset without rebuilding the site.
 
-import { parseModelCatalogueJson, parseRunsIndexJson, parseSiteContextJson } from "@azohra/meteo.briefing/contract";
-import type { ModelCatalogue, SiteForecast } from "@azohra/meteo.briefing/contract";
-import { localDateKey, localHourOfDay, runFreshness } from "@azohra/meteo.briefing/derive";
+import { parseForecastManifestJson, parseModelCatalogueJson, parseSiteContextJson } from "@azohra/meteo.briefing/contract";
+import type { ForecastManifest, ModelCatalogue, SiteForecast } from "@azohra/meteo.briefing/contract";
+import { localDateKey, localHourOfDay, localInstantMs, runFreshness } from "@azohra/meteo.briefing/derive";
 import { buildKeySpec, buildMeteogramScene, renderKeySvg, renderMeteogramSvg } from "@azohra/meteo.briefing/meteogram";
 import { loadForecast } from "@azohra/meteo.briefing/transport";
 import { windWindow, compassPoint, type Launch } from "../lib/launches.ts";
@@ -12,7 +12,9 @@ import { NwsChart, type NwsHour } from "../lib/nws-chart.ts";
 import { DATA_BASE } from "../lib/site.ts";
 import { fmt, ft, relativeTime } from "../lib/units.ts";
 
-const MODEL_ORDER = ["hrrr-conus", "rrfs", "hrdps-continental", "gfs"];
+// Short-range high-resolution models first, then regional, global, and the ensemble.
+const MODEL_ORDER = ["hrrr-conus", "hrdps-continental", "rrfs", "rdps", "gfs", "gdps", "geps"];
+const HOUR_MS = 3_600_000;
 const DAY_START = 7;
 const DAY_END = 21;
 const DAYS = 7;
@@ -99,6 +101,9 @@ let day = days[0];
 let model: string | null = null;
 let catalogue: ModelCatalogue | null = null;
 let launchElevationM: number | null = null;
+// Manifests are small and say which hours each model covers; a model's profile
+// is only downloaded when it is selected.
+const manifests = new Map<string, ForecastManifest>();
 const profiles = new Map<string, { profile: SiteForecast; referenceTime: string; generatedAt: string; stale: boolean } | null>();
 let nws: NwsSiteDocument | null = null;
 let chart: NwsChart | null = null;
@@ -120,14 +125,44 @@ function modelEntry(slug: string) {
   return catalogue?.models.find((m) => m.slug === slug) ?? null;
 }
 
+async function loadManifest(slug: string) {
+  const text = await fetch(`${DATA_BASE}/${slug}/manifest.json`)
+    .then((r) => (r.ok ? r.text() : null))
+    .catch(() => null);
+  const manifest = text ? parseForecastManifestJson(text) : null;
+  if (manifest && manifest.sites.some((s) => s.slug === launch.slug)) manifests.set(slug, manifest);
+}
+
+/** True when the model's published run has hours inside the pilots' day for `dateKey`. */
+function covers(slug: string, dateKey: string) {
+  const m = manifests.get(slug);
+  if (!m) return false;
+  const reference = Date.parse(m.referenceTime);
+  const first = reference + m.firstForecastHour * HOUR_MS;
+  const last = reference + m.lastForecastHour * HOUR_MS;
+  return first <= localInstantMs(dateKey, DAY_END, tz) && last >= localInstantMs(dateKey, DAY_START, tz);
+}
+
+function modelLabel(slug: string) {
+  return modelEntry(slug)?.label.replace(" CONUS", "").replace(" continental", "") ?? slug;
+}
+
+async function selectModel(slug: string) {
+  model = slug;
+  $("meteogram").classList.add("is-loading");
+  render();
+  await profileFor(slug);
+  $("meteogram").classList.remove("is-loading");
+  if (model === slug) render();
+}
+
 // ── rendering ────────────────────────────────────────────────────────────
 
 function renderDayTabs() {
   const host = $("day-tabs");
   host.replaceChildren(
     ...days.map((key, i) => {
-      const profile = model ? profiles.get(model)?.profile : null;
-      const hasModel = profile?.hours.some((h) => inDay(h.validAt, key)) ?? false;
+      const hasModel = MODEL_ORDER.some((slug) => covers(slug, key));
       const hasNws = nws?.hours.some((h) => inDay(h.validAt, key)) ?? false;
       return button(dayLabel(key, i), daySub(key), key === day, !hasModel && !hasNws, () => {
         day = key;
@@ -142,12 +177,8 @@ function renderModelTabs(available: string[]) {
   host.replaceChildren(
     ...available.map((slug) => {
       const entry = modelEntry(slug);
-      const label = entry?.label.replace(" CONUS", "").replace(" continental", "") ?? slug;
-      return button(label, entry ? `${entry.gridKm} km` : null, slug === model, false, async () => {
-        model = slug;
-        await profileFor(slug);
-        render();
-      });
+      const sub = entry ? `${entry.gridKm} km${entry.kind === "ensemble" ? " · ens" : ""}` : null;
+      return button(modelLabel(slug), sub, slug === model, false, () => selectModel(slug));
     }),
   );
 }
@@ -159,12 +190,15 @@ function renderMeteogram() {
   const key = $("meteogram-key");
   const loaded = model ? profiles.get(model) : null;
   const entry = model ? modelEntry(model) : null;
-  title.textContent = entry ? `Soaring meteogram · ${entry.label}, ${entry.gridKm} km` : "Soaring meteogram";
+  title.textContent = entry
+    ? `Soaring meteogram · ${entry.label}, ${entry.gridKm} km${entry.kind === "ensemble" ? " ensemble" : ""}`
+    : "Soaring meteogram";
 
   if (!loaded) {
     meta.textContent = "";
     key.replaceChildren();
-    frame.innerHTML = `<p class="chart-status">Model forecasts for this launch are not published yet.</p>`;
+    const loading = model !== null && !profiles.has(model);
+    frame.innerHTML = `<p class="chart-status">${loading ? "Loading the model forecast…" : "Model forecasts for this launch are not published yet."}</p>`;
     return;
   }
 
@@ -178,11 +212,19 @@ function renderMeteogram() {
 
   const hours = loaded.profile.hours.filter((h) => inDay(h.validAt, day));
   if (hours.length === 0) {
-    const longer = MODEL_ORDER.slice().reverse().find((slug) => profiles.get(slug)?.profile.hours.some((h) => inDay(h.validAt, day)));
+    const other = MODEL_ORDER.find((slug) => slug !== model && covers(slug, day));
     frame.innerHTML = "";
     const p = document.createElement("p");
     p.className = "chart-status";
-    p.textContent = `${entry?.label ?? "This model"} does not reach this day.${longer && longer !== model ? ` Try ${modelEntry(longer)?.label ?? longer}.` : ""}`;
+    p.textContent = `${modelLabel(model ?? "")} does not reach this day. `;
+    if (other) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "button secondary";
+      b.textContent = `Show ${modelLabel(other)}`;
+      b.addEventListener("click", () => selectModel(other));
+      p.appendChild(b);
+    }
     frame.appendChild(p);
     key.replaceChildren();
     return;
@@ -237,8 +279,7 @@ function renderNws() {
 
 function render() {
   renderDayTabs();
-  const available = MODEL_ORDER.filter((slug) => profiles.get(slug));
-  renderModelTabs(available);
+  renderModelTabs(MODEL_ORDER.filter((slug) => manifests.has(slug)));
   renderMeteogram();
   renderNws();
 }
@@ -276,13 +317,12 @@ function renderText(office: NwsOfficeDocument | null) {
 
 async function start() {
   for (const id of ["meteogram", "nws-charts"]) $(id).classList.add("is-loading");
-  const [runsText, modelsJson, contextJson, nwsDoc] = await Promise.all([
-    getJson<unknown>("runs.json"),
+  const [modelsJson, contextJson, nwsDoc] = await Promise.all([
     getJson<unknown>("models.json"),
     getJson<unknown>("site-context.json"),
     getJson<NwsSiteDocument>(`nws/sites/${launch.slug}.json`),
+    ...MODEL_ORDER.map(loadManifest),
   ]);
-  const runs = runsText ? parseRunsIndexJson(JSON.stringify(runsText)) : null;
   catalogue = modelsJson ? parseModelCatalogueJson(JSON.stringify(modelsJson)) : null;
   const context = contextJson ? parseSiteContextJson(JSON.stringify(contextJson)) : null;
   launchElevationM = context?.sites[launch.slug]?.elevation.elevationM ?? null;
@@ -293,9 +333,9 @@ async function start() {
     $("launch-elevation-item").hidden = false;
   }
 
-  const published = MODEL_ORDER.filter((slug) => runs?.runs[slug]);
-  await Promise.all(published.map((slug) => profileFor(slug)));
-  model = published.find((slug) => profiles.get(slug)) ?? null;
+  // Default: the sharpest model that covers today (or any published one).
+  model = MODEL_ORDER.find((slug) => covers(slug, day)) ?? MODEL_ORDER.find((slug) => manifests.has(slug)) ?? null;
+  if (model) await profileFor(model);
 
   if (sample) $("sample-notice").hidden = false;
   for (const id of ["meteogram", "nws-charts"]) $(id).classList.remove("is-loading");

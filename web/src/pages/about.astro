@@ -11,9 +11,18 @@ import Base from "../layouts/Base.astro";
       <p style="margin-top:8px">
         Weather models forecast the whole atmosphere above each launch. The meteogram shows, hour by hour, how high thermals
         should reach, where the cloud base is, how stable the air is, and the wind at every height. It is built with
-        <a href="https://meteo.azohra.com/">meteo by Azohra</a> from NOAA's HRRR (3 km, 2 days), RRFS (3 km, 3.5 days) and
-        GFS (25 km, up to 16 days) models. New model runs are published every six hours.
+        <a href="https://meteo.azohra.com/">meteo by Azohra</a> from two national weather services. New runs are published as
+        soon as each model releases them, usually every six or twelve hours.
       </p>
+      <ul style="margin-top:8px">
+        <li><strong>Today and tomorrow</strong>: NOAA's HRRR (3 km) and Canada's HRDPS (2.5 km). When they agree, trust the day more.</li>
+        <li><strong>Out to day 3</strong>: NOAA's RRFS (3 km) and Canada's RDPS (10 km).</li>
+        <li><strong>Long range</strong>: NOAA's GFS (25 km, 16 days) and Canada's GDPS (15 km, 10 days) for the trend.</li>
+        <li>
+          <strong>Ensemble (GEPS)</strong>: Canada's model run 21 times with slightly different starts. The shaded bands show the
+          spread: wide bands mean the long range is uncertain.
+        </li>
+      </ul>
       <p style="margin-top:8px">
         A 3 km model sees a smoothed mountain, so its ground is often lower than the real launch. The launch elevation line
         on the chart is measured from terrain data, not taken from the model.

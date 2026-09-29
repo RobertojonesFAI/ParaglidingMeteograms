@@ -32,6 +32,7 @@ const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url
 const sites = readJson("../../forecasts/sites.json");
 const models = readJson("../dev-data-src/models.json");
 const scenario = readJson("../dev-data-src/convective-cycle.profile.json");
+const ensembleScenario = readJson("../dev-data-src/ensemble-wide.profile.json");
 
 function write(key, value, parse) {
   const text = `${JSON.stringify(value, null, 1)}\n`;
@@ -107,6 +108,30 @@ function profile(model, site, referenceTime, stepHours, count) {
 
 const iso = (t) => new Date(t).toISOString().replace(".000Z", "Z");
 
+// Ensemble sample: meteo's "ensemble-wide" scenario (percentile blocks per
+// field) re-timed onto local days; values are left as the scenario has them.
+function ensembleProfile(model, site, referenceTime, stepHours, count) {
+  const entry = models.models.find((m) => m.slug === model);
+  const hours = [];
+  for (let i = 1; i <= count; i += 1) {
+    const t = referenceTime + i * stepHours * HOUR;
+    const L = localHour(site.timeZone, t);
+    const source = ensembleScenario.hours[Math.min(5, Math.max(0, Math.round(((L - 7) / 14) * 5)))];
+    hours.push({ ...structuredClone(source), validAt: iso(t) });
+  }
+  const doc = {
+    schemaVersion: 2,
+    model,
+    run: { referenceTime: iso(referenceTime), generatedAt: iso(referenceTime + 2 * HOUR), members: ensembleScenario.run.members },
+    site: { ...ensembleScenario.site, id: site.slug, name: site.name, latitude: site.latitude, longitude: site.longitude, timeZone: site.timeZone },
+    semantics: { ...ensembleScenario.semantics, precipitation: entry.capabilities.precipitation },
+    hours,
+  };
+  const check = siteForecastSchema.safeParse(doc);
+  if (!check.success) throw new Error(`${model}/${site.slug}: ${check.error.message}`);
+  return doc;
+}
+
 // ── build ────────────────────────────────────────────────────────────────
 
 rmSync(out, { recursive: true, force: true });
@@ -120,8 +145,12 @@ const runs = {};
 write("sites.json", sites, parseSitesCatalogueJson);
 write("models.json", models, parseModelCatalogueJson);
 
-for (const [model, ref, step, count] of [["hrrr-conus", hrrrRef, 1, 48], ["gfs", gfsRef, 3, 56]]) {
-  for (const site of sites.sites) write(`${model}/sites/${site.slug}.json`, profile(model, site, ref, step, count), parseSiteForecastJson);
+for (const [model, ref, step, count, build] of [
+  ["hrrr-conus", hrrrRef, 1, 48, profile],
+  ["gfs", gfsRef, 3, 56, profile],
+  ["geps", gfsRef, 3, 56, ensembleProfile],
+]) {
+  for (const site of sites.sites) write(`${model}/sites/${site.slug}.json`, build(model, site, ref, step, count), parseSiteForecastJson);
   const generatedAt = new Date(ref + 2 * HOUR).toISOString();
   write(
     `${model}/manifest.json`,

@@ -43,7 +43,7 @@ jobs:
         run: pnpm test
       - name: Engine dry run
         run: |
-          for model in hrrr-conus rrfs gfs hrdps-continental; do
+          for model in hrrr-conus rrfs gfs hrdps-continental rdps gdps geps; do
             pnpm exec meteo forecast build --model "$model" --sites ./sites.json --output data --dry-run
           done
       # Fetches the live NWS forecast for every launch without publishing it,
