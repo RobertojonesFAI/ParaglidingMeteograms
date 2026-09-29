@@ -31,7 +31,9 @@ jobs:
     concurrency:
       group: build-noaa
       cancel-in-progress: false
-    timeout-minutes: 45
+    # A first run, or a tick where all three models have a new run, downloads
+    # HRRR (~6 min), RRFS (~11 min) and GFS back to back.
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: forecasts
