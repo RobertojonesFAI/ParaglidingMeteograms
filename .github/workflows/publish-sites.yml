@@ -16,6 +16,7 @@ on:
     paths:
       - "forecasts/sites.json"
       - "forecasts/pnpm-lock.yaml"
+      - ".github/workflows/publish-sites.yml"
   workflow_dispatch:
 
 permissions:
@@ -52,8 +53,8 @@ jobs:
       - name: Validate sites.json
         run: pnpm run check
       - name: Publish sites.json
-        run: pnpm run publish:sites
+        run: scripts/run-annotated.sh "publish sites.json" pnpm run publish:sites
       - name: Measure terrain (site-context.json)
-        run: pnpm exec meteo forecast terrain --sync
+        run: scripts/run-annotated.sh terrain pnpm exec meteo forecast terrain --sync
       - name: Publish model catalogue (models.json)
-        run: pnpm exec meteo forecast publish --models
+        run: scripts/run-annotated.sh "publish models.json" pnpm exec meteo forecast publish --models

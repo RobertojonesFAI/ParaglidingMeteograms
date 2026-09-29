@@ -48,4 +48,4 @@ jobs:
           node-version: 24
       - run: pnpm install --frozen-lockfile
       - name: Fetch and publish
-        run: pnpm run nws --publish
+        run: scripts/run-annotated.sh "NWS forecast" pnpm run nws --publish
