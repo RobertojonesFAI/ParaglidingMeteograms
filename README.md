@@ -4,22 +4,31 @@ Soaring forecasts for paragliding launches, starting with Cervidae Peak near Boi
 
 For every launch, the pipeline samples high-resolution weather models and publishes an
 hour-by-hour meteogram: thermal strength (w\*), boundary-layer top, cloud base, usable-lift
-top, and wind at each height. New launches are added by editing one file.
+top, and wind at each height. Alongside it, the official National Weather Service point
+forecast for the launch is published every hour. New launches are added by editing one file.
 
 ## How it works
 
 ```
 forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ──► website (web/, coming next)
-   (the launches)        every 15 min        public JSON documents      reads and draws the meteograms
+   (the launches)        on a schedule       public JSON documents      reads and draws the forecasts
 ```
 
 - **`forecasts/`** is the forecast operator. It pins the
   [`@azohra/meteo.forecast`](https://meteo.azohra.com/docs/forecast/) engine, which downloads
   NOAA model data, samples it at each launch, derives the soaring quantities, and publishes
-  versioned JSON documents.
-- **GitHub Actions** runs the engine on a schedule. Builds are idempotent: a tick with no new
+  versioned JSON documents. It also fetches the NWS forecast for each launch from
+  [api.weather.gov](https://www.weather.gov/documentation/services-web-api).
+- **GitHub Actions** runs both on a schedule. Model builds are idempotent: a tick with no new
   model run publishes nothing.
 - **Cloudflare R2** stores the published dataset. The website reads it.
+
+| Workflow | When | What it does |
+| --- | --- | --- |
+| Check | Every pull request and push | Validates `sites.json`, runs unit tests, dry-runs the engine, fetches the live NWS forecast without publishing |
+| Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `site-context.json`, `models.json` |
+| Build forecasts | Every 15 minutes | Builds and publishes the model meteograms |
+| NWS forecast | Every hour at :20 | Fetches and publishes the NWS forecast for every launch |
 
 ## Launches
 
@@ -41,6 +50,29 @@ NAM is deliberately not used: NOAA retires it on 2026-10-06.
 A 3 km model sees a smoothed mountain, so its terrain at a launch is usually lower than the
 real launch. The engine measures the real launch elevation separately (`site-context.json`)
 and records the model's terrain in every profile (`site.modelElevationM`).
+
+## National Weather Service forecast
+
+The NWS forecast is the forecasters' official forecast on a 2.5 km grid: the same data behind
+the [forecast.weather.gov hourly graph](https://forecast.weather.gov/MapClick.php?lat=43.6233&lon=-115.9808&unit=0&lg=english&FcstType=graphical)
+for each launch. It complements the models with a human-edited forecast and fields pilots use
+directly:
+
+- hourly wind, gusts and direction (10 m), sky cover, temperature, dew point, humidity
+- **mixing height** (above ground) and **transport wind** (mean wind through the mixed layer)
+- probability of precipitation and of thunder, lightning activity level, ceiling, visibility
+- the hourly short text ("Slight Chance T-storms") and the 12-hour text periods
+- per forecast office: the latest **Area Forecast Discussion**, and the **Soaring Forecast**
+  when the office issues one
+
+No API key is needed. NWS asks each client to identify itself; the requests send
+`ParaglidingMeteograms/0.1 (+https://github.com/RobertojonesFAI/ParaglidingMeteograms)` as the
+User-Agent, which the `NWS_USER_AGENT` environment variable can override (for example to add a
+contact email). NWS only covers the United States; a launch outside it is reported as failed in
+the NWS run and is still built by the models that cover it.
+
+Speeds are published in m/s, heights in metres and temperatures in °C, like the model
+documents; each document's `units` field describes every column.
 
 ## One-time setup
 
@@ -66,6 +98,8 @@ and records the model's terrain in every profile (`site.modelElevationM`).
    catalogue `models.json`.
 5. **Build the first forecast**: *Actions → Build forecasts → Run workflow*, or wait for the next
    15-minute tick. The job summary shows the result for each model.
+6. **Fetch the first NWS forecast**: *Actions → NWS forecast → Run workflow*, or wait for the
+   next hour. The job summary shows the next 12 hours for each launch.
 
 The scheduled workflows are skipped until `METEO_R2_BUCKET` is set, so nothing fails before
 setup is finished.
@@ -90,8 +124,8 @@ setup is finished.
      elevation itself.
    - Launch-specific details the engine does not use (launch direction, good wind range,
      landing zone, notes) belong in the website, not here.
-2. Commit to `main`. *Publish launches* runs automatically, and the next *Build forecasts* tick
-   includes the new launch.
+2. Commit to `main`. *Publish launches* runs automatically, the next *Build forecasts* tick
+   includes the new launch, and the next *NWS forecast* run fetches its NWS forecast.
 
 The *Check* workflow validates `sites.json` on every pull request and push.
 
@@ -107,11 +141,18 @@ runs.json                            latest published run of every model
 <model>/manifest.json                current run of one model
 <model>/sites/<slug>.json            one launch's hour-by-hour profile
 <model>/history/<slug>/<YYYY-MM>.jsonl.gz   append-only monthly archive of every run
+nws/manifest.json                    what the latest NWS run published, per launch and office
+nws/sites/<slug>.json                one launch's NWS forecast: hourly rows and text periods
+nws/offices/<office>.json            Area Forecast Discussion and Soaring Forecast for an office
 ```
 
-The document schemas are described in the
+The model document schemas are described in the
 [meteo contract reference](https://meteo.azohra.com/docs/briefing/contract/). A reader should
 check that a profile's `referenceTime` matches its model's manifest before drawing it.
+
+The NWS documents are this repository's own format (`schemaVersion: 1`), built in
+[`forecasts/scripts/lib/nws.mjs`](forecasts/scripts/lib/nws.mjs). Each hourly row has
+`validAt` (UTC) and one column per field; a field NWS does not provide for that hour is `null`.
 
 ## Local development
 
@@ -121,6 +162,8 @@ Requires Node 22 or later and pnpm.
 cd forecasts
 pnpm install
 pnpm run check                     # validate sites.json
+pnpm test                          # unit tests
+pnpm run nws --output data         # fetch the NWS forecast into data/nws/ without publishing
 pnpm exec meteo forecast build --model hrrr-conus --sites ./sites.json --output data --dry-run
 ```
 
@@ -142,9 +185,9 @@ which republishes `models.json` for the new engine version.
 ## Operational notes
 
 - GitHub disables scheduled workflows in a public repository after 60 days without repository
-  activity. Re-enable *Build forecasts* from the Actions tab if that happens.
-- Forecast documents are derived from NOAA data (public domain) and, if HRDPS is enabled, from
-  ECCC data under the
+  activity. Re-enable *Build forecasts* and *NWS forecast* from the Actions tab if that happens.
+- Forecast documents are derived from NOAA data, including the National Weather Service
+  forecast (public domain), and, if HRDPS is enabled, from ECCC data under the
   [ECCC Data Server End-use Licence](https://eccc-msc.github.io/open-data/licence/readme_en/).
   Keep the provider attribution wherever the forecasts are shown.
 - These are model forecasts, not observations. They do not replace a pilot's own assessment of

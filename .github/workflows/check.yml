@@ -35,8 +35,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Validate sites.json
         run: pnpm run check
+      - name: Unit tests
+        run: pnpm test
       - name: Engine dry run
         run: |
           for model in hrrr-conus rrfs gfs hrdps-continental; do
             pnpm exec meteo forecast build --model "$model" --sites ./sites.json --output data --dry-run
           done
+      # Fetches the live NWS forecast for every launch without publishing it,
+      # so a change in api.weather.gov's responses shows up here first. NWS
+      # has occasional outages, so a failure here does not block the check.
+      - name: NWS live fetch (no publish)
+        continue-on-error: true
+        run: pnpm run nws --output nws-smoke

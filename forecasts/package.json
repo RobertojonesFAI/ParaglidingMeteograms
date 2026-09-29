@@ -6,6 +6,8 @@
   "description": "Forecast operator: builds and publishes soaring meteograms for each launch with @azohra/meteo.forecast",
   "scripts": {
     "check": "node scripts/check-sites.mjs",
+    "test": "node --test",
+    "nws": "node scripts/nws.mjs",
     "publish:sites": "node scripts/publish-sites.mjs"
   },
   "engines": {

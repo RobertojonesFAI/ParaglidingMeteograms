@@ -1,0 +1,51 @@
+# Fetches the National Weather Service (NOAA) forecast for every launch once
+# an hour and publishes it under nws/ in the dataset bucket:
+#   nws/sites/<slug>.json   hourly grid forecast (wind, gusts, sky cover,
+#                           mixing height, transport wind, thunder, ...) and
+#                           the 12-hour text periods
+#   nws/offices/<id>.json   Area Forecast Discussion, and the Soaring Forecast
+#                           when the office issues one
+#   nws/manifest.json       what the run published (uploaded last)
+#
+# Reads the launches from forecasts/sites.json in this repo. No API key is
+# needed. Skipped until the METEO_R2_BUCKET repository variable is set.
+name: NWS forecast
+
+on:
+  schedule:
+    - cron: "20 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nws
+  cancel-in-progress: false
+
+jobs:
+  nws:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && vars.METEO_R2_BUCKET != ''
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: forecasts
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      METEO_S3_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          package_json_file: forecasts/package.json
+          cache: true
+          cache_dependency_path: forecasts/pnpm-lock.yaml
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Fetch and publish
+        run: pnpm run nws --publish
