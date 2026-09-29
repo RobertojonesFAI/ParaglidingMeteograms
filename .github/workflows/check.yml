@@ -1,0 +1,42 @@
+# Checks every change before it reaches main: frozen install, sites.json
+# validation, and an engine dry run for each model. Uses no secrets and never
+# touches the bucket, so it also runs on pull requests.
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - "forecasts/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: forecasts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          package_json_file: forecasts/package.json
+          cache: true
+          cache_dependency_path: forecasts/pnpm-lock.yaml
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Validate sites.json
+        run: pnpm run check
+      - name: Engine dry run
+        run: |
+          for model in hrrr-conus rrfs gfs hrdps-continental; do
+            pnpm exec meteo forecast build --model "$model" --sites ./sites.json --output data --dry-run
+          done

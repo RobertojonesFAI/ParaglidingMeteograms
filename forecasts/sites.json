@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "sites": [
+    {
+      "slug": "cervidae-peak",
+      "name": "Cervidae Peak",
+      "latitude": 43.62332,
+      "longitude": -115.98076,
+      "timeZone": "America/Boise"
+    }
+  ]
+}

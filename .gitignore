@@ -1,0 +1,5 @@
+node_modules/
+forecasts/data/
+.DS_Store
+.env
+.env.*

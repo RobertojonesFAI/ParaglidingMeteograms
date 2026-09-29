@@ -1,0 +1,19 @@
+{
+  "name": "paragliding-meteograms-forecasts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Forecast operator: builds and publishes soaring meteograms for each launch with @azohra/meteo.forecast",
+  "scripts": {
+    "check": "node scripts/check-sites.mjs",
+    "publish:sites": "node scripts/publish-sites.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "dependencies": {
+    "@azohra/meteo.forecast": "0.6.0",
+    "aws4fetch": "1.0.20"
+  }
+}

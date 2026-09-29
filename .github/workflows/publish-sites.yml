@@ -1,0 +1,59 @@
+# Publishes the dataset root whenever the launch list or the engine changes:
+#   1. sites.json        - uploaded from this repo, unchanged (the engine never writes it)
+#   2. site-context.json - the engine measures each launch's elevation, terrain
+#                          and land cover, and republishes it when it is stale
+#   3. models.json       - the model catalogue of the pinned engine version
+#
+# Run this once by hand (Actions tab -> Publish launches -> Run workflow)
+# before the first "Build forecasts" run: builds read sites.json from the bucket.
+#
+# Skipped until the METEO_R2_BUCKET repository variable is set.
+name: Publish launches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "forecasts/sites.json"
+      - "forecasts/pnpm-lock.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dataset-root
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && vars.METEO_R2_BUCKET != ''
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: forecasts
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      METEO_S3_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          package_json_file: forecasts/package.json
+          cache: true
+          cache_dependency_path: forecasts/pnpm-lock.yaml
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Validate sites.json
+        run: pnpm run check
+      - name: Publish sites.json
+        run: pnpm run publish:sites
+      - name: Measure terrain (site-context.json)
+        run: pnpm exec meteo forecast terrain --sync
+      - name: Publish model catalogue (models.json)
+        run: pnpm exec meteo forecast publish --models

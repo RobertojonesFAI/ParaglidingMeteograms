@@ -1,0 +1,202 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@azohra/meteo.forecast':
+        specifier: 0.6.0
+        version: 0.6.0
+      aws4fetch:
+        specifier: 1.0.20
+        version: 1.0.20
+
+packages:
+
+  '@azohra/meteo.briefing@0.6.2':
+    resolution: {integrity: sha512-Oq7iYrqbU+AJchqOaNUPG9ui69vADSbw1ut2qGsU+CSgzEJXrCDmdx2dBYDrsmzd/9Jp4wDmLCFt+/0ADlUPIw==}
+    engines: {node: '>=22'}
+
+  '@azohra/meteo.core@0.3.0':
+    resolution: {integrity: sha512-FS1n6L9FRP+S2WUVbaQgC9xK64YlnWQjdkARn3IEsQ+QP+t3bI4EC1sk6NjmFxLs8Cs2GMDkSb0UKqBKirXivw==}
+    engines: {node: '>=22'}
+
+  '@azohra/meteo.forecast@0.6.0':
+    resolution: {integrity: sha512-1I3iyq3Z70pAejLj6q4BrzJrEF8/qrX+OplKRAatvtlEG5j8CIBYMVqG6JxtdTc0l+ECntzc1ngQAMX5l21mlw==}
+    engines: {node: '>=22'}
+    hasBin: true
+
+  '@azohra/meteo.grib@0.1.4':
+    resolution: {integrity: sha512-fNGJwFfoAPIAGw8pkCksYttCe5606xLnB6eT50XaD+M3dBIM3MOYiGqL+0wHj9uOCs3dOex3Qws4uBCitqTyQw==}
+    engines: {node: '>=22'}
+
+  '@azohra/meteo.j2k@0.2.0':
+    resolution: {integrity: sha512-iaQ22wPRgri5/VdZrHfSvEwRveznWozKHq8Ts7cy/zzkWZr9AMbhIeI8OlHKZtsaZV3F2VJlgP6zXj95b+nQog==}
+    engines: {node: '>=22'}
+
+  '@cornerstonejs/codec-openjpeg@1.3.6':
+    resolution: {integrity: sha512-bSdZXF+2GxfBkWHUr7yGLQtIwbAm9wOl3e4ARee/9Z9lfKyVqhUCixI6+ZjIn9YKTIuDcn/NZNK94XEUg1SBtw==}
+    engines: {node: '>=0.14'}
+
+  '@petamoriken/float16@3.9.3':
+    resolution: {integrity: sha512-8awtpHXCx/bNpFt4mt2xdkgtgVvKqty8VbjHI/WWWQuEw+KLzFot3f4+LkQY9YmOtq7A5GdOnqoIC8Pdygjk2g==}
+
+  ajv@8.20.0:
+    resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
+
+  aws4fetch@1.0.20:
+    resolution: {integrity: sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==}
+
+  fast-deep-equal@3.1.3:
+    resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
+
+  fast-uri@3.1.8:
+    resolution: {integrity: sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==}
+
+  geotiff@3.0.5:
+    resolution: {integrity: sha512-OWcL9S9+yDZ6iAlXMt32T1iwUApJM8UiD47xbm6ZP1h33d10fqkPs14EG/ttT5EnefpZSx3G15iDFC5FxUNUwA==}
+    engines: {node: '>=10.19'}
+
+  h5wasm@0.10.3:
+    resolution: {integrity: sha512-W4Jy5ExtX/VNbyD8GdOBckDuj6AL16TemppVNxZsV3rJZEWCv2sxlCzOttZLer3zkMttbDYsWHl0qt1z3Bln+Q==}
+
+  json-schema-traverse@1.0.0:
+    resolution: {integrity: sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==}
+
+  lerc@3.0.0:
+    resolution: {integrity: sha512-Rm4J/WaHhRa93nCN2mwWDZFoRVF18G1f47C+kvQWyHGEZxFpTUi73p7lMVSAndyxGt6lJ2/CFbOcf9ra5p8aww==}
+
+  mgrs@1.0.0:
+    resolution: {integrity: sha512-awNbTOqCxK1DBGjalK3xqWIstBZgN6fxsMSiXLs9/spqWkF2pAhb2rrYCFSsr1/tT7PhcDGjZndG8SWYn0byYA==}
+
+  pako@2.2.0:
+    resolution: {integrity: sha512-zJq6RP/5q+TO2OpFV3FHzlPnFjmkb7Nc99a5SNjJE+uu/PkpChs+NIZSSzbBoD+6kjiISXjfYdwj1ZRQ81dz/w==}
+
+  parse-headers@2.0.6:
+    resolution: {integrity: sha512-Tz11t3uKztEW5FEVZnj1ox8GKblWn+PvHY9TmJV5Mll2uHEwRdR/5Li1OlXoECjLYkApdhWy44ocONwXLiKO5A==}
+
+  proj4@2.22.0:
+    resolution: {integrity: sha512-MVvH09QrYm3A235rcX39WDiCKanrBiblu28l0KYIn/B2DofmYhvP/LLS43kE66jNDfx/P1l/nah3JmsAq8UgbQ==}
+    peerDependencies:
+      geotiff: '*'
+    peerDependenciesMeta:
+      geotiff:
+        optional: true
+
+  quick-lru@6.1.2:
+    resolution: {integrity: sha512-AAFUA5O1d83pIHEhJwWCq/RQcRukCkn/NSm2QsTEMle5f2hP0ChI2+3Xb051PZCkLryI/Ir1MVKviT2FIloaTQ==}
+    engines: {node: '>=12'}
+
+  require-from-string@2.0.2:
+    resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
+    engines: {node: '>=0.10.0'}
+
+  web-worker@1.5.0:
+    resolution: {integrity: sha512-RiMReJrTAiA+mBjGONMnjVDP2u3p9R1vkcGz6gDIrOMT3oGuYwX2WRMYI9ipkphSuE5XKEhydbhNEJh4NY9mlw==}
+
+  wkt-parser@1.5.6:
+    resolution: {integrity: sha512-cqHU3lzGt/gt2OqIORP0uVy5yeOX43WABmgFkmJsmcqH3HhQo9PiJG6ftytwGKmpQUbegeX7+pQc2BuNCRfcrw==}
+
+  xml-utils@1.10.2:
+    resolution: {integrity: sha512-RqM+2o1RYs6T8+3DzDSoTRAUfrvaejbVHcp3+thnAtDKo8LskR+HomLajEy5UjTz24rpka7AxVBRR3g2wTUkJA==}
+
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+
+  zstddec@0.2.0:
+    resolution: {integrity: sha512-oyPnDa1X5c13+Y7mA/FDMNJrn4S8UNBe0KCqtDmor40Re7ALrPN6npFwyYVRRh+PqozZQdeg23QtbcamZnG5rA==}
+
+snapshots:
+
+  '@azohra/meteo.briefing@0.6.2':
+    dependencies:
+      '@azohra/meteo.core': 0.3.0
+      zod: 4.6.5
+
+  '@azohra/meteo.core@0.3.0':
+    dependencies:
+      zod: 4.6.5
+
+  '@azohra/meteo.forecast@0.6.0':
+    dependencies:
+      '@azohra/meteo.briefing': 0.6.2
+      '@azohra/meteo.core': 0.3.0
+      '@azohra/meteo.grib': 0.1.4
+      ajv: 8.20.0
+      aws4fetch: 1.0.20
+      geotiff: 3.0.5
+      h5wasm: 0.10.3
+      proj4: 2.22.0(geotiff@3.0.5)
+      zod: 4.6.5
+
+  '@azohra/meteo.grib@0.1.4':
+    dependencies:
+      '@azohra/meteo.j2k': 0.2.0
+      '@cornerstonejs/codec-openjpeg': 1.3.6
+
+  '@azohra/meteo.j2k@0.2.0': {}
+
+  '@cornerstonejs/codec-openjpeg@1.3.6': {}
+
+  '@petamoriken/float16@3.9.3': {}
+
+  ajv@8.20.0:
+    dependencies:
+      fast-deep-equal: 3.1.3
+      fast-uri: 3.1.8
+      json-schema-traverse: 1.0.0
+      require-from-string: 2.0.2
+
+  aws4fetch@1.0.20: {}
+
+  fast-deep-equal@3.1.3: {}
+
+  fast-uri@3.1.8: {}
+
+  geotiff@3.0.5:
+    dependencies:
+      '@petamoriken/float16': 3.9.3
+      lerc: 3.0.0
+      pako: 2.2.0
+      parse-headers: 2.0.6
+      quick-lru: 6.1.2
+      web-worker: 1.5.0
+      xml-utils: 1.10.2
+      zstddec: 0.2.0
+
+  h5wasm@0.10.3: {}
+
+  json-schema-traverse@1.0.0: {}
+
+  lerc@3.0.0: {}
+
+  mgrs@1.0.0: {}
+
+  pako@2.2.0: {}
+
+  parse-headers@2.0.6: {}
+
+  proj4@2.22.0(geotiff@3.0.5):
+    dependencies:
+      mgrs: 1.0.0
+      wkt-parser: 1.5.6
+    optionalDependencies:
+      geotiff: 3.0.5
+
+  quick-lru@6.1.2: {}
+
+  require-from-string@2.0.2: {}
+
+  web-worker@1.5.0: {}
+
+  wkt-parser@1.5.6: {}
+
+  xml-utils@1.10.2: {}
+
+  zod@4.6.5: {}
+
+  zstddec@0.2.0: {}
