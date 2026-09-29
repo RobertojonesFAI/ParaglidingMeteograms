@@ -194,6 +194,24 @@ test("buildSiteDocument fails loudly on an unexpected unit", () => {
   assert.throws(() => buildSiteDocument({ site, point, grid, hourly, forecast, now: NOW }), /unexpected NWS unit/);
 });
 
+test("percent layers without a declared unit are accepted as percent", () => {
+  const grid = makeGrid({
+    probabilityOfThunder: { values: [{ validTime: "2026-09-29T18:00:00+00:00/PT2H", value: 20 }] },
+  });
+  const doc = buildSiteDocument({ site, point, grid, hourly, forecast, now: NOW });
+  assert.equal(doc.hours[0].thunderProbabilityPct, 20);
+  assert.equal(doc.hours[2].thunderProbabilityPct, null);
+});
+
+test("an unknown unit on a secondary field empties that field and keeps the forecast", () => {
+  const warnings = [];
+  const grid = makeGrid({ mixingHeight: { uom: "wmoUnit:furlong", values: [{ validTime: "2026-09-29T18:00:00+00:00/PT4H", value: 14 }] } });
+  const doc = buildSiteDocument({ site, point, grid, hourly, forecast, now: NOW, warn: (m) => warnings.push(m) });
+  assert.equal(doc.hours[0].mixingHeightM, null);
+  assert.equal(doc.hours[0].windSpeedMps, 5.1);
+  assert.match(warnings.join("\n"), /mixingHeightM: unexpected NWS unit "wmoUnit:furlong".*left empty/);
+});
+
 function router(routes) {
   const calls = [];
   const getJson = async (url) => {

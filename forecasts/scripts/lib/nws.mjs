@@ -87,12 +87,24 @@ function round(value, decimals) {
   return Math.round(value * factor) / factor;
 }
 
-export function convert(field, uom, value) {
-  if (value === null || value === undefined) return null;
-  const [, unitClass, decimals] = FIELDS[field];
+// Percentages and indices have no physical unit; NWS sometimes omits the uom
+// on those layers (seen on probabilityOfThunder), and that is not ambiguous.
+const UNITLESS = new Set(["percent", "index"]);
+
+/** Fields the forecast is useless without: an unknown unit on these stops the launch. */
+export const CORE_FIELDS = new Set(["temperatureC", "windSpeedMps", "windGustMps", "windDirectionDeg"]);
+
+function converter(field, uom) {
+  const [, unitClass] = FIELDS[field];
+  if (uom == null && UNITLESS.has(unitClass)) return (v) => v;
   const fn = CONVERSIONS[unitClass][uom];
   if (!fn) throw new Error(`${field}: unexpected NWS unit "${uom}" for a ${unitClass} value`);
-  return round(fn(value), decimals);
+  return fn;
+}
+
+export function convert(field, uom, value) {
+  if (value === null || value === undefined) return null;
+  return round(converter(field, uom)(value), FIELDS[field][2]);
 }
 
 // ── time ─────────────────────────────────────────────────────────────────
@@ -139,13 +151,29 @@ export function describeWeather(value) {
 /**
  * Builds one launch's document from already-fetched API responses.
  * `hourly` and `forecast` may be null when those endpoints failed.
+ *
+ * A layer whose unit is not recognised is never published with a guessed
+ * unit: a core field (wind, gust, direction, temperature) stops the launch,
+ * any other field is left empty for this run with a warning.
  */
-export function buildSiteDocument({ site, point, grid, hourly, forecast, now = Date.now() }) {
+export function buildSiteDocument({ site, point, grid, hourly, forecast, now = Date.now(), warn = console.warn }) {
   const props = grid.properties;
   const layers = {};
   for (const [field, [layerName]] of Object.entries(FIELDS)) {
     const layer = props[layerName];
-    layers[field] = { uom: layer?.uom ?? null, hours: expandLayer(layer) };
+    const hours = expandLayer(layer);
+    const uom = layer?.uom ?? null;
+    const hasValues = [...hours.values()].some((v) => v !== null && v !== undefined);
+    if (hasValues) {
+      try {
+        converter(field, uom);
+      } catch (error) {
+        if (CORE_FIELDS.has(field)) throw error;
+        warn(`${site.slug}: ${error.message}; ${field} left empty this run`);
+        hours.clear();
+      }
+    }
+    layers[field] = { uom, hours };
   }
   const weather = expandLayer(props.weather);
 
@@ -282,7 +310,7 @@ export async function fetchSiteDocument(site, getJson, { now = Date.now(), warn 
   const hourly = await optional("hourly forecast", forecastHourly);
   const periods = await optional("text forecast", forecast);
 
-  const document = buildSiteDocument({ site, point, grid, hourly, forecast: periods, now });
+  const document = buildSiteDocument({ site, point, grid, hourly, forecast: periods, now, warn });
   const ageHours = document.updateTime ? (now - Date.parse(document.updateTime)) / HOUR : Infinity;
   if (ageHours > 12) warn(`${site.slug}: NWS grid updateTime ${document.updateTime} is ${Math.round(ageHours)} h old`);
   return document;

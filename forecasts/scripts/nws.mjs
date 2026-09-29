@@ -38,6 +38,8 @@ const sitesPath = resolve(args.sites);
 const sites = parseSites(readFileSync(sitesPath, "utf-8"), sitesPath);
 const getJson = createClient({ userAgent: process.env.NWS_USER_AGENT || DEFAULT_USER_AGENT });
 const now = Date.now();
+// "WARN " lines become warning annotations in GitHub Actions (scripts/run-annotated.sh).
+const warn = (message) => console.warn(`WARN ${message}`);
 
 const written = []; // [key, bytes] in upload order
 function write(key, document) {
@@ -52,7 +54,7 @@ const siteEntries = [];
 const documents = [];
 for (const site of sites) {
   try {
-    const document = await fetchSiteDocument(site, getJson, { now });
+    const document = await fetchSiteDocument(site, getJson, { now, warn });
     write(paths.site(site.slug), document);
     documents.push(document);
     siteEntries.push({ slug: site.slug, ok: true, office: document.grid.office, updateTime: document.updateTime });
@@ -66,7 +68,7 @@ for (const site of sites) {
 const officeEntries = [];
 const offices = [...new Set(documents.map((d) => d.grid.office))].sort();
 for (const office of offices) {
-  const document = await fetchOfficeDocument(office, getJson, { now });
+  const document = await fetchOfficeDocument(office, getJson, { now, warn });
   write(paths.office(office), document);
   officeEntries.push({
     office,
