@@ -29,7 +29,7 @@ forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ─
 | Workflow | When | What it does |
 | --- | --- | --- |
 | Check | Every pull request and push | Forecasts: validates the launches, unit tests, engine dry run, live NWS fetch without publishing. Web: unit tests, type checks, sample dataset, site build |
-| Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `site-context.json`, `models.json` |
+| Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `models.json`, `site-context.json` |
 | Build forecasts | Every 15 minutes | Builds and publishes the model meteograms |
 | NWS forecast | Every hour at :20 | Fetches and publishes the NWS forecast for every launch |
 
@@ -195,6 +195,10 @@ which republishes `models.json` for the new engine version.
 
 ## Operational notes
 
+- Terrain context (`site-context.json`) is measured by
+  [`forecasts/scripts/terrain.mjs`](forecasts/scripts/terrain.mjs), which runs the engine's own
+  measurement on map tiles joined across tile edges. Engine 0.6.0 stops when a launch is within
+  about 10 km of a 1° tile edge, and the 116°W meridian runs through the Boise foothills.
 - GitHub disables scheduled workflows in a public repository after 60 days without repository
   activity. Re-enable *Build forecasts* and *NWS forecast* from the Actions tab if that happens.
 - Forecast documents are derived from NOAA data, including the National Weather Service

@@ -8,13 +8,15 @@
     "check": "node scripts/check-sites.mjs",
     "test": "node --test",
     "nws": "node scripts/nws.mjs",
-    "publish:sites": "node scripts/publish-sites.mjs"
+    "publish:sites": "node scripts/publish-sites.mjs",
+    "terrain": "node scripts/terrain.mjs"
   },
   "engines": {
     "node": ">=22"
   },
   "packageManager": "pnpm@10.28.0",
   "dependencies": {
+    "@azohra/meteo.briefing": "0.6.2",
     "@azohra/meteo.forecast": "0.6.0",
     "aws4fetch": "1.0.20"
   }

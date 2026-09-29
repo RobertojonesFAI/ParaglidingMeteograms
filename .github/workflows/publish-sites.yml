@@ -1,8 +1,8 @@
 # Publishes the dataset root whenever the launch list or the engine changes:
 #   1. sites.json        - uploaded from this repo, unchanged (the engine never writes it)
-#   2. site-context.json - the engine measures each launch's elevation, terrain
-#                          and land cover, and republishes it when it is stale
-#   3. models.json       - the model catalogue of the pinned engine version
+#   2. models.json       - the model catalogue of the pinned engine version
+#   3. site-context.json - each launch's measured elevation, terrain and land
+#                          cover, republished when it is stale
 #
 # Run this once by hand (Actions tab -> Publish launches -> Run workflow)
 # before the first "Build forecasts" run: builds read sites.json from the bucket.
@@ -54,7 +54,9 @@ jobs:
         run: pnpm run check
       - name: Publish sites.json
         run: scripts/run-annotated.sh "publish sites.json" pnpm run publish:sites
-      - name: Measure terrain (site-context.json)
-        run: scripts/run-annotated.sh terrain pnpm exec meteo forecast terrain --sync
       - name: Publish model catalogue (models.json)
         run: scripts/run-annotated.sh "publish models.json" pnpm exec meteo forecast publish --models
+      # scripts/terrain.mjs runs the engine's own measurement on tiles joined
+      # across tile edges (engine 0.6.0 cannot read across them).
+      - name: Measure terrain (site-context.json)
+        run: scripts/run-annotated.sh terrain pnpm run terrain --sync
