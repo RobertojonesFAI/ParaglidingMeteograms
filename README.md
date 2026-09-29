@@ -5,13 +5,14 @@ Soaring forecasts for paragliding launches, starting with Cervidae Peak near Boi
 For every launch, the pipeline samples high-resolution weather models and publishes an
 hour-by-hour meteogram: thermal strength (w\*), boundary-layer top, cloud base, usable-lift
 top, and wind at each height. Alongside it, the official National Weather Service point
-forecast for the launch is published every hour. New launches are added by editing one file.
+forecast for the launch is published every hour. New launches are added from the site's admin
+page.
 
 ## How it works
 
 ```
-forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ──► website (web/, coming next)
-   (the launches)        on a schedule       public JSON documents      reads and draws the forecasts
+forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ──► website (web/)
+   (the launches)        on a schedule       JSON documents            Cloudflare Worker: pages + /data
 ```
 
 - **`forecasts/`** is the forecast operator. It pins the
@@ -21,11 +22,13 @@ forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ─
   [api.weather.gov](https://www.weather.gov/documentation/services-web-api).
 - **GitHub Actions** runs both on a schedule. Model builds are idempotent: a tick with no new
   model run publishes nothing.
-- **Cloudflare R2** stores the published dataset. The website reads it.
+- **Cloudflare R2** stores the published dataset.
+- **[`web/`](web/README.md)** is the public site and its admin page, served by a Cloudflare
+  Worker that reads the bucket directly. Its README covers deployment and the admin setup.
 
 | Workflow | When | What it does |
 | --- | --- | --- |
-| Check | Every pull request and push | Validates `sites.json`, runs unit tests, dry-runs the engine, fetches the live NWS forecast without publishing |
+| Check | Every pull request and push | Forecasts: validates the launches, unit tests, engine dry run, live NWS fetch without publishing. Web: unit tests, type checks, sample dataset, site build |
 | Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `site-context.json`, `models.json` |
 | Build forecasts | Every 15 minutes | Builds and publishes the model meteograms |
 | NWS forecast | Every hour at :20 | Fetches and publishes the NWS forecast for every launch |
@@ -106,7 +109,13 @@ setup is finished.
 
 ## Adding a launch
 
-1. Add an entry to [`forecasts/sites.json`](forecasts/sites.json):
+Use the site's admin page (`/admin`): place the launch on the map, choose the direction it faces
+and its wind limits, and save. The page commits the change for you. See
+[web/README.md](web/README.md#admin-page-setup) for the one-time setup.
+
+To add one by hand instead, edit both files in one commit:
+
+1. Add the identity to [`forecasts/sites.json`](forecasts/sites.json):
 
    ```json
    {
@@ -122,12 +131,14 @@ setup is finished.
    - Use lowercase letters, digits, and hyphens only.
    - Do not add elevation or any other field. The engine rejects unknown fields and measures
      elevation itself.
-   - Launch-specific details the engine does not use (launch direction, good wind range,
-     landing zone, notes) belong in the website, not here.
-2. Commit to `main`. *Publish launches* runs automatically, the next *Build forecasts* tick
-   includes the new launch, and the next *NWS forecast* run fetches its NWS forecast.
+2. Add the same slug to [`web/src/data/launches.json`](web/src/data/launches.json) with the
+   direction the launch faces (`facingDeg`), the wind window half-width, the wind and gust limits
+   in mph, a region label and notes.
+3. Commit to `main`. *Publish launches* runs automatically and the site rebuilds. The next *NWS
+   forecast* run (within the hour) and the next new model run (up to 6 hours: a build only
+   publishes when a model's run advances) add the launch's forecasts.
 
-The *Check* workflow validates `sites.json` on every pull request and push.
+The *Check* workflow validates both files on every pull request and push.
 
 ## Published dataset
 

@@ -1,0 +1,118 @@
+---
+import Base from "../../layouts/Base.astro";
+import { COMPASS_16, TIME_ZONES } from "../../lib/launches.ts";
+---
+
+<Base title="Admin" current="admin" description="Add and edit launches.">
+  <h1>Launches admin</h1>
+  <p id="admin-status" class="muted" style="margin-top:6px">Checking your sign-in…</p>
+
+  <section class="card" style="margin-top:20px" id="list-card" hidden>
+    <div class="card-head">
+      <h2>Launches</h2>
+      <button type="button" class="button" id="new-launch">Add a launch</button>
+    </div>
+    <div class="chart-scroll">
+      <table class="data">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col" class="text">Slug</th>
+            <th scope="col">Location</th>
+            <th scope="col">Faces</th>
+            <th scope="col">Wind (mph)</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="launch-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <form class="card" id="launch-form" style="margin-top:20px" hidden novalidate>
+    <div class="card-head">
+      <h2 id="form-title">Add a launch</h2>
+      <span class="card-sub">Click the map to place the launch, or type its coordinates.</span>
+    </div>
+
+    <div id="picker" class="map" role="region" aria-label="Launch location map"></div>
+
+    <div class="form-grid" style="margin-top:18px">
+      <div class="field">
+        <label for="f-name">Name</label>
+        <input type="text" id="f-name" name="name" required maxlength="80" autocomplete="off" />
+        <span class="hint" id="slug-hint"></span>
+      </div>
+      <div class="field">
+        <label for="f-region">Region</label>
+        <input type="text" id="f-region" name="region" maxlength="80" placeholder="Boise, ID" />
+      </div>
+      <div class="field">
+        <label for="f-lat">Latitude</label>
+        <input type="number" id="f-lat" name="latitude" step="0.00001" min="-90" max="90" required />
+      </div>
+      <div class="field">
+        <label for="f-lon">Longitude</label>
+        <input type="number" id="f-lon" name="longitude" step="0.00001" min="-180" max="180" required />
+      </div>
+      <div class="field">
+        <label for="f-tz">Time zone</label>
+        <select id="f-tz" name="timeZone">
+          {TIME_ZONES.map((tz) => <option value={tz}>{tz.replace("America/", "").replace("Pacific/", "").replace("_", " ")}</option>)}
+        </select>
+      </div>
+
+      <fieldset class="field wide">
+        <legend>Launch faces</legend>
+        <div class="compass">
+          {
+            COMPASS_16.map((point, i) => (
+              <label>
+                <input type="radio" name="facing" value={String(i * 22.5)} required />
+                {point}
+              </label>
+            ))
+          }
+        </div>
+        <span class="hint">The wind window is centred on this direction.</span>
+      </fieldset>
+
+      <div class="field">
+        <label for="f-arc">Wind window</label>
+        <select id="f-arc" name="windArcHalfWidthDeg">
+          <option value="30">±30°</option>
+          <option value="45" selected>±45°</option>
+          <option value="60">±60°</option>
+          <option value="90">±90°</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-min">Minimum wind (mph)</label>
+        <input type="number" id="f-min" name="windMinMph" min="0" max="40" value="5" required />
+      </div>
+      <div class="field">
+        <label for="f-max">Maximum wind (mph)</label>
+        <input type="number" id="f-max" name="windMaxMph" min="1" max="50" value="15" required />
+      </div>
+      <div class="field">
+        <label for="f-gust">Maximum gust (mph)</label>
+        <input type="number" id="f-gust" name="gustMaxMph" min="1" max="60" value="20" required />
+      </div>
+      <div class="field wide">
+        <label for="f-notes">Notes</label>
+        <textarea id="f-notes" name="notes" maxlength="2000" placeholder="Access, landing zone, local rules…"></textarea>
+      </div>
+    </div>
+
+    <ul class="errors" id="form-errors" role="alert"></ul>
+    <div class="form-actions">
+      <button type="submit" class="button" id="save">Save launch</button>
+      <button type="button" class="button secondary" id="cancel">Cancel</button>
+      <span class="muted" id="save-status" role="status"></span>
+    </div>
+  </form>
+
+  <script>
+    import "../../scripts/admin.ts";
+  </script>
+</Base>

@@ -1,0 +1,89 @@
+---
+import Base from "../../layouts/Base.astro";
+import { launches } from "../../lib/catalog.ts";
+import { compassPoint, type Launch } from "../../lib/launches.ts";
+
+export function getStaticPaths() {
+  return launches.map((launch) => ({ params: { slug: launch.slug }, props: { launch } }));
+}
+
+const { launch } = Astro.props as { launch: Launch };
+const facing = compassPoint(launch.facingDeg);
+const zoneName =
+  new Intl.DateTimeFormat("en-US", { timeZone: launch.timeZone, timeZoneName: "long" })
+    .formatToParts(new Date())
+    .find((p) => p.type === "timeZoneName")?.value ?? launch.timeZone;
+---
+
+<Base title={launch.name} description={`Soaring meteogram and National Weather Service forecast for ${launch.name}.`}>
+  <script type="application/json" id="launch-config" set:html={JSON.stringify(launch)} />
+
+  <p class="eyebrow"><a href="/">Launches</a>{launch.region && ` · ${launch.region}`}</p>
+  <h1>{launch.name}</h1>
+  <ul class="facts">
+    <li>Faces <strong>{facing}</strong> ({launch.facingDeg}°)</li>
+    <li>Launch range <strong>{launch.windMinMph}–{launch.windMaxMph} mph</strong>, gusts under {launch.gustMaxMph}</li>
+    <li id="launch-elevation-item" hidden>Launch elevation <strong id="launch-elevation"></strong></li>
+    <li>Times in {zoneName}</li>
+  </ul>
+  {launch.notes && <p class="notice" style="margin-top:14px">{launch.notes}</p>}
+
+  <p id="sample-notice" class="notice sample" style="margin-top:14px" hidden>
+    Sample data for local development. This is not a forecast.
+  </p>
+
+  <div class="controls">
+    <div>
+      <span class="control-label" id="day-label">Day</span>
+      <div class="segmented" id="day-tabs" role="group" aria-labelledby="day-label"></div>
+    </div>
+    <div>
+      <span class="control-label" id="model-label">Model</span>
+      <div class="segmented" id="model-tabs" role="group" aria-labelledby="model-label"></div>
+    </div>
+  </div>
+
+  <section class="card" aria-labelledby="meteogram-title">
+    <div class="card-head">
+      <h2 id="meteogram-title">Soaring meteogram</h2>
+      <span class="card-sub" id="meteogram-meta"></span>
+    </div>
+    <div class="chart-scroll meteogram-frame" id="meteogram">
+      <p class="chart-status">Loading the model forecast…</p>
+    </div>
+    <details style="margin-top:14px">
+      <summary>How to read this chart</summary>
+      <p class="muted" style="margin-bottom:10px">
+        Time runs left to right; height above sea level runs up. The lines show how high thermals are expected to reach
+        (boundary layer top, usable lift top, cloud base), the barbs show wind at each height (km/h), and the strips below
+        show surface conditions. The green and red marks under the hours compare the surface wind with this launch's wind
+        window ({facing} ±{launch.windArcHalfWidthDeg}°).
+        <a href="https://meteo.azohra.com/docs/briefing/reading-a-meteogram/">Full guide to every mark</a>.
+      </p>
+      <div class="chart-scroll" id="meteogram-key"></div>
+    </details>
+  </section>
+
+  <section class="card" aria-labelledby="nws-title">
+    <div class="card-head">
+      <h2 id="nws-title">National Weather Service forecast</h2>
+      <span class="card-sub"><span id="nws-meta"></span> · <a id="nws-link" hidden>Open on weather.gov</a></span>
+    </div>
+    <div id="nws-charts">
+      <p class="chart-status">Loading the NWS forecast…</p>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="text-title">
+    <div class="card-head">
+      <h2 id="text-title">Forecast discussion</h2>
+      <span class="card-sub">National Weather Service text products</span>
+    </div>
+    <ul class="periods" id="nws-periods"></ul>
+    <div class="stack" id="nws-products" style="margin-top:18px"></div>
+  </section>
+
+  <script>
+    import "../../scripts/launch-page.ts";
+  </script>
+</Base>

@@ -1,0 +1,41 @@
+---
+import Base from "../layouts/Base.astro";
+import { launches } from "../lib/catalog.ts";
+import { compassPoint } from "../lib/launches.ts";
+import { SITE_TAGLINE } from "../lib/site.ts";
+
+const markers = launches.map((l) => ({ slug: l.slug, name: l.name, latitude: l.latitude, longitude: l.longitude }));
+---
+
+<Base current="launches">
+  <h1>Launches</h1>
+  <p class="muted" style="margin-top:6px">{SITE_TAGLINE}: model meteograms and the National Weather Service forecast for each launch.</p>
+
+  <div id="launch-map" class="map" style="margin-top:20px" role="region" aria-label="Map of launches"></div>
+  <script type="application/json" id="launch-markers" set:html={JSON.stringify(markers)} />
+
+  <div class="launch-grid">
+    {
+      launches.map((launch) => (
+        <a class="card launch-card" href={`/launches/${launch.slug}`}>
+          <h3>{launch.name}</h3>
+          <ul class="facts">
+            {launch.region && <li>{launch.region}</li>}
+            <li>
+              Faces <strong>{compassPoint(launch.facingDeg)}</strong>
+            </li>
+            <li>
+              {launch.windMinMph}–{launch.windMaxMph} mph
+            </li>
+          </ul>
+        </a>
+      ))
+    }
+  </div>
+
+  <script>
+    import { mountLaunchMap } from "../scripts/map.ts";
+    const markers = JSON.parse(document.getElementById("launch-markers")?.textContent ?? "[]");
+    mountLaunchMap(document.getElementById("launch-map")!, markers);
+  </script>
+</Base>

@@ -1,0 +1,952 @@
+{
+  "schemaVersion": 2,
+  "model": "convective-cycle",
+  "run": {
+    "referenceTime": "2000-01-01T06:00:00Z",
+    "generatedAt": "2000-01-01T06:00:00Z"
+  },
+  "site": {
+    "id": "synthetic-ridge",
+    "name": "Synthetic Ridge",
+    "latitude": 49,
+    "longitude": -123,
+    "modelElevationM": 900,
+    "timeZone": "Etc/UTC"
+  },
+  "semantics": {
+    "gust": "hourMax",
+    "precipitation": "instantRate"
+  },
+  "hours": [
+    {
+      "validAt": "2000-01-01T10:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 903,
+        "temperatureC": 7,
+        "dewPointC": 4,
+        "windSpeedMps": 1,
+        "windDirectionDeg": 150,
+        "cloudCoverPercent": 35,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": -35,
+        "latentHeatFluxWm2": 2,
+        "windGustMps": 2,
+        "capeJkg": 0,
+        "cinJkg": -180,
+        "pblHeightM": 100,
+        "lowCloudPercent": 30,
+        "midCloudPercent": 15,
+        "highCloudPercent": 8
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 10.5,
+          "dewPointC": 7.5,
+          "windSpeedMps": 1.5,
+          "windDirectionDeg": 158
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 10.3,
+          "dewPointC": 7.8,
+          "windSpeedMps": 2,
+          "windDirectionDeg": 166
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 7,
+          "dewPointC": 4.5,
+          "windSpeedMps": 2.5,
+          "windDirectionDeg": 174
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 3.8,
+          "dewPointC": 1.8,
+          "windSpeedMps": 3,
+          "windDirectionDeg": 182
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 1,
+          "dewPointC": -1.5,
+          "windSpeedMps": 3.5,
+          "windDirectionDeg": 190
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": -2.2,
+          "dewPointC": -5.7,
+          "windSpeedMps": 4,
+          "windDirectionDeg": 198
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": -5.2,
+          "dewPointC": -9.7,
+          "windSpeedMps": 4.5,
+          "windDirectionDeg": 206
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -9.2,
+          "dewPointC": -15.2,
+          "windSpeedMps": 5,
+          "windDirectionDeg": 212
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 1100,
+        "thermalVelocityMps": 0,
+        "cloudBaseM": 1273.1,
+        "usableLiftTopM": null
+      }
+    },
+    {
+      "validAt": "2000-01-01T11:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 902.5,
+        "temperatureC": 8.5,
+        "dewPointC": 4.5,
+        "windSpeedMps": 1.2,
+        "windDirectionDeg": 155,
+        "cloudCoverPercent": 30,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": -25,
+        "latentHeatFluxWm2": 3,
+        "windGustMps": 2.5,
+        "capeJkg": 0,
+        "cinJkg": -160,
+        "pblHeightM": 120,
+        "lowCloudPercent": 24,
+        "midCloudPercent": 10,
+        "highCloudPercent": 6
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 11.5,
+          "dewPointC": 7.5,
+          "windSpeedMps": 1.8,
+          "windDirectionDeg": 163
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 10.8,
+          "dewPointC": 7.3,
+          "windSpeedMps": 2.2,
+          "windDirectionDeg": 171
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 7.8,
+          "dewPointC": 4.8,
+          "windSpeedMps": 2.6,
+          "windDirectionDeg": 179
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 4.5,
+          "dewPointC": 2,
+          "windSpeedMps": 3.2,
+          "windDirectionDeg": 187
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 1.6,
+          "dewPointC": -0.9,
+          "windSpeedMps": 3.7,
+          "windDirectionDeg": 195
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": -1.6,
+          "dewPointC": -4.8,
+          "windSpeedMps": 4.2,
+          "windDirectionDeg": 203
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": -4.6,
+          "dewPointC": -8.8,
+          "windSpeedMps": 4.7,
+          "windDirectionDeg": 211
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -8.8,
+          "dewPointC": -14.3,
+          "windSpeedMps": 5.2,
+          "windDirectionDeg": 217
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 1100,
+        "thermalVelocityMps": 0,
+        "cloudBaseM": 1397.4,
+        "usableLiftTopM": null
+      }
+    },
+    {
+      "validAt": "2000-01-01T12:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 902,
+        "temperatureC": 11,
+        "dewPointC": 4,
+        "windSpeedMps": 1.5,
+        "windDirectionDeg": 160,
+        "cloudCoverPercent": 25,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": -15,
+        "latentHeatFluxWm2": 5,
+        "windGustMps": 3,
+        "capeJkg": 0,
+        "cinJkg": -140,
+        "pblHeightM": 150,
+        "lowCloudPercent": 18,
+        "midCloudPercent": 8,
+        "highCloudPercent": 5
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 12.5,
+          "dewPointC": 7.5,
+          "windSpeedMps": 2,
+          "windDirectionDeg": 168
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 11.5,
+          "dewPointC": 7.5,
+          "windSpeedMps": 2.4,
+          "windDirectionDeg": 176
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 8.5,
+          "dewPointC": 5.5,
+          "windSpeedMps": 2.8,
+          "windDirectionDeg": 184
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 5.2,
+          "dewPointC": 3.2,
+          "windSpeedMps": 3.4,
+          "windDirectionDeg": 192
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 2.3,
+          "dewPointC": 0.1,
+          "windSpeedMps": 3.9,
+          "windDirectionDeg": 200
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": -0.8,
+          "dewPointC": -3.8,
+          "windSpeedMps": 4.5,
+          "windDirectionDeg": 208
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": -3.6,
+          "dewPointC": -7.6,
+          "windSpeedMps": 5,
+          "windDirectionDeg": 216
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -7.8,
+          "dewPointC": -13.8,
+          "windSpeedMps": 5.5,
+          "windDirectionDeg": 222
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 1100,
+        "thermalVelocityMps": 0,
+        "cloudBaseM": 1768.8,
+        "usableLiftTopM": null
+      }
+    },
+    {
+      "validAt": "2000-01-01T13:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 901.7,
+        "temperatureC": 16,
+        "dewPointC": 5,
+        "windSpeedMps": 2,
+        "windDirectionDeg": 165,
+        "cloudCoverPercent": 18,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": 20,
+        "latentHeatFluxWm2": 10,
+        "windGustMps": 4,
+        "capeJkg": 60,
+        "cinJkg": -90,
+        "pblHeightM": 250,
+        "lowCloudPercent": 12,
+        "midCloudPercent": 8,
+        "highCloudPercent": 5
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 15,
+          "dewPointC": 8,
+          "windSpeedMps": 2.5,
+          "windDirectionDeg": 173
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 13.5,
+          "dewPointC": 7.5,
+          "windSpeedMps": 2.8,
+          "windDirectionDeg": 181
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 10,
+          "dewPointC": 5,
+          "windSpeedMps": 3.2,
+          "windDirectionDeg": 189
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 6.4,
+          "dewPointC": 2.4,
+          "windSpeedMps": 3.8,
+          "windDirectionDeg": 197
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 3.1,
+          "dewPointC": 0.1,
+          "windSpeedMps": 4.3,
+          "windDirectionDeg": 205
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": -0.3,
+          "dewPointC": -2.8,
+          "windSpeedMps": 4.8,
+          "windDirectionDeg": 213
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": -3.2,
+          "dewPointC": -6.7,
+          "windSpeedMps": 5.3,
+          "windDirectionDeg": 221
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -7.5,
+          "dewPointC": -12.5,
+          "windSpeedMps": 5.8,
+          "windDirectionDeg": 227
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 1100,
+        "thermalVelocityMps": 0.47,
+        "cloudBaseM": 2264,
+        "usableLiftTopM": null
+      }
+    },
+    {
+      "validAt": "2000-01-01T14:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 901.2,
+        "temperatureC": 23,
+        "dewPointC": 3,
+        "windSpeedMps": 2.5,
+        "windDirectionDeg": 170,
+        "cloudCoverPercent": 10,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": 240,
+        "latentHeatFluxWm2": 45,
+        "windGustMps": 5,
+        "capeJkg": 320,
+        "cinJkg": -35,
+        "pblHeightM": 1400,
+        "lowCloudPercent": 5,
+        "midCloudPercent": 6,
+        "highCloudPercent": 8
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 19.3,
+          "dewPointC": 9.3,
+          "windSpeedMps": 3,
+          "windDirectionDeg": 178
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 17.1,
+          "dewPointC": 8.1,
+          "windSpeedMps": 3.3,
+          "windDirectionDeg": 186
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 13.5,
+          "dewPointC": 5.5,
+          "windSpeedMps": 3.7,
+          "windDirectionDeg": 194
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 9.7,
+          "dewPointC": 2.7,
+          "windSpeedMps": 4.2,
+          "windDirectionDeg": 202
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 6.4,
+          "dewPointC": 0.4,
+          "windSpeedMps": 4.8,
+          "windDirectionDeg": 210
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": 3,
+          "dewPointC": -2,
+          "windSpeedMps": 5.4,
+          "windDirectionDeg": 218
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": -0.2,
+          "dewPointC": -4.2,
+          "windSpeedMps": 6,
+          "windDirectionDeg": 226
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -4.6,
+          "dewPointC": -9.6,
+          "windSpeedMps": 6.5,
+          "windDirectionDeg": 232
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 2427,
+        "thermalVelocityMps": 2.1,
+        "cloudBaseM": 3364.9,
+        "usableLiftTopM": 2582.8
+      }
+    },
+    {
+      "validAt": "2000-01-01T15:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 900.6,
+        "temperatureC": 25,
+        "dewPointC": 4,
+        "windSpeedMps": 3,
+        "windDirectionDeg": 175,
+        "cloudCoverPercent": 8,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": 360,
+        "latentHeatFluxWm2": 60,
+        "windGustMps": 6,
+        "capeJkg": 780,
+        "cinJkg": -5,
+        "pblHeightM": 1950,
+        "lowCloudPercent": 3,
+        "midCloudPercent": 5,
+        "highCloudPercent": 10
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 22.8,
+          "dewPointC": 10.8,
+          "windSpeedMps": 3.5,
+          "windDirectionDeg": 183
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 20.4,
+          "dewPointC": 9.4,
+          "windSpeedMps": 3.8,
+          "windDirectionDeg": 191
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 16.2,
+          "dewPointC": 6.2,
+          "windSpeedMps": 4.2,
+          "windDirectionDeg": 199
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 11.8,
+          "dewPointC": 2.8,
+          "windSpeedMps": 4.7,
+          "windDirectionDeg": 207
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 7.6,
+          "dewPointC": -0.4,
+          "windSpeedMps": 5.3,
+          "windDirectionDeg": 215
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": 3.4,
+          "dewPointC": -3.6,
+          "windSpeedMps": 6,
+          "windDirectionDeg": 223
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": -0.8,
+          "dewPointC": -6.8,
+          "windSpeedMps": 6.5,
+          "windDirectionDeg": 231
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -5,
+          "dewPointC": -12,
+          "windSpeedMps": 7,
+          "windDirectionDeg": 237
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 2828.6,
+        "thermalVelocityMps": 2.59,
+        "cloudBaseM": 3489.5,
+        "usableLiftTopM": 3082.3
+      }
+    },
+    {
+      "validAt": "2000-01-01T16:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 900.1,
+        "temperatureC": 24,
+        "dewPointC": 1,
+        "windSpeedMps": 3.2,
+        "windDirectionDeg": 180,
+        "cloudCoverPercent": 15,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": 210,
+        "latentHeatFluxWm2": 45,
+        "windGustMps": 5.5,
+        "capeJkg": 440,
+        "cinJkg": -20,
+        "pblHeightM": 1800,
+        "lowCloudPercent": 8,
+        "midCloudPercent": 8,
+        "highCloudPercent": 12
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 21.5,
+          "dewPointC": 10.5,
+          "windSpeedMps": 3.7,
+          "windDirectionDeg": 188
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 18.9,
+          "dewPointC": 8.9,
+          "windSpeedMps": 4,
+          "windDirectionDeg": 196
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 14.9,
+          "dewPointC": 5.9,
+          "windSpeedMps": 4.4,
+          "windDirectionDeg": 204
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 10.8,
+          "dewPointC": 2.8,
+          "windSpeedMps": 4.9,
+          "windDirectionDeg": 212
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 7,
+          "dewPointC": 0,
+          "windSpeedMps": 5.5,
+          "windDirectionDeg": 220
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": 3.2,
+          "dewPointC": -2.8,
+          "windSpeedMps": 6.2,
+          "windDirectionDeg": 228
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": 0,
+          "dewPointC": -5,
+          "windSpeedMps": 6.8,
+          "windDirectionDeg": 236
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -4.4,
+          "dewPointC": -10.4,
+          "windSpeedMps": 7.2,
+          "windDirectionDeg": 242
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 2539.3,
+        "thermalVelocityMps": 2.05,
+        "cloudBaseM": 3725.4,
+        "usableLiftTopM": 2703.2
+      }
+    },
+    {
+      "validAt": "2000-01-01T17:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 900.3,
+        "temperatureC": 17,
+        "dewPointC": 7,
+        "windSpeedMps": 2.5,
+        "windDirectionDeg": 185,
+        "cloudCoverPercent": 30,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": -25,
+        "latentHeatFluxWm2": 8,
+        "windGustMps": 4.5,
+        "capeJkg": 80,
+        "cinJkg": -70,
+        "pblHeightM": 250,
+        "lowCloudPercent": 22,
+        "midCloudPercent": 12,
+        "highCloudPercent": 8
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 18,
+          "dewPointC": 12,
+          "windSpeedMps": 3,
+          "windDirectionDeg": 193
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 17.3,
+          "dewPointC": 12.3,
+          "windSpeedMps": 3.4,
+          "windDirectionDeg": 201
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 13.8,
+          "dewPointC": 9.8,
+          "windSpeedMps": 3.8,
+          "windDirectionDeg": 209
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 10,
+          "dewPointC": 7,
+          "windSpeedMps": 4.3,
+          "windDirectionDeg": 217
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 6.6,
+          "dewPointC": 4.6,
+          "windSpeedMps": 4.8,
+          "windDirectionDeg": 225
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": 3.2,
+          "dewPointC": 1.2,
+          "windSpeedMps": 5.4,
+          "windDirectionDeg": 233
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": 0.2,
+          "dewPointC": -2.8,
+          "windSpeedMps": 6,
+          "windDirectionDeg": 241
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -4.2,
+          "dewPointC": -8.2,
+          "windSpeedMps": 6.5,
+          "windDirectionDeg": 247
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 1100,
+        "thermalVelocityMps": 0,
+        "cloudBaseM": 2143,
+        "usableLiftTopM": null
+      }
+    },
+    {
+      "validAt": "2000-01-01T18:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 900.6,
+        "temperatureC": 13,
+        "dewPointC": 7,
+        "windSpeedMps": 2,
+        "windDirectionDeg": 190,
+        "cloudCoverPercent": 40,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": -45,
+        "latentHeatFluxWm2": 5,
+        "windGustMps": 3,
+        "capeJkg": 20,
+        "cinJkg": -110,
+        "pblHeightM": 150,
+        "lowCloudPercent": 30,
+        "midCloudPercent": 15,
+        "highCloudPercent": 10
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 15,
+          "dewPointC": 10,
+          "windSpeedMps": 2.5,
+          "windDirectionDeg": 198
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 14.8,
+          "dewPointC": 10.8,
+          "windSpeedMps": 3,
+          "windDirectionDeg": 206
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 11.3,
+          "dewPointC": 7.8,
+          "windSpeedMps": 3.4,
+          "windDirectionDeg": 214
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 7.5,
+          "dewPointC": 4.5,
+          "windSpeedMps": 3.9,
+          "windDirectionDeg": 222
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 4,
+          "dewPointC": 1.5,
+          "windSpeedMps": 4.4,
+          "windDirectionDeg": 230
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": 0.8,
+          "dewPointC": -1.7,
+          "windSpeedMps": 5,
+          "windDirectionDeg": 238
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": -2.3,
+          "dewPointC": -5.8,
+          "windSpeedMps": 5.5,
+          "windDirectionDeg": 246
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -6.7,
+          "dewPointC": -11.7,
+          "windSpeedMps": 6,
+          "windDirectionDeg": 252
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 1100,
+        "thermalVelocityMps": 0,
+        "cloudBaseM": 1647.2,
+        "usableLiftTopM": null
+      }
+    },
+    {
+      "validAt": "2000-01-01T19:00:00Z",
+      "surface": {
+        "seaLevelPressureHpa": 901,
+        "temperatureC": 9,
+        "dewPointC": 5.5,
+        "windSpeedMps": 1.5,
+        "windDirectionDeg": 195,
+        "cloudCoverPercent": 50,
+        "precipitationMmHr": 0,
+        "sensibleHeatFluxWm2": -55,
+        "latentHeatFluxWm2": 3,
+        "windGustMps": 2.5,
+        "capeJkg": 0,
+        "cinJkg": -160,
+        "pblHeightM": 100,
+        "lowCloudPercent": 40,
+        "midCloudPercent": 20,
+        "highCloudPercent": 12
+      },
+      "levels": [
+        {
+          "pressureHpa": 925,
+          "heightM": 1100,
+          "temperatureC": 12,
+          "dewPointC": 9,
+          "windSpeedMps": 2,
+          "windDirectionDeg": 203
+        },
+        {
+          "pressureHpa": 900,
+          "heightM": 1350,
+          "temperatureC": 11.8,
+          "dewPointC": 9.3,
+          "windSpeedMps": 2.5,
+          "windDirectionDeg": 211
+        },
+        {
+          "pressureHpa": 850,
+          "heightM": 1750,
+          "temperatureC": 8.5,
+          "dewPointC": 6,
+          "windSpeedMps": 3,
+          "windDirectionDeg": 219
+        },
+        {
+          "pressureHpa": 800,
+          "heightM": 2200,
+          "temperatureC": 4.8,
+          "dewPointC": 2.8,
+          "windSpeedMps": 3.5,
+          "windDirectionDeg": 227
+        },
+        {
+          "pressureHpa": 750,
+          "heightM": 2650,
+          "temperatureC": 1.5,
+          "dewPointC": -1,
+          "windSpeedMps": 4,
+          "windDirectionDeg": 235
+        },
+        {
+          "pressureHpa": 700,
+          "heightM": 3150,
+          "temperatureC": -1.8,
+          "dewPointC": -4.8,
+          "windSpeedMps": 4.5,
+          "windDirectionDeg": 243
+        },
+        {
+          "pressureHpa": 650,
+          "heightM": 3650,
+          "temperatureC": -4.8,
+          "dewPointC": -8.8,
+          "windSpeedMps": 5,
+          "windDirectionDeg": 251
+        },
+        {
+          "pressureHpa": 600,
+          "heightM": 4250,
+          "temperatureC": -9,
+          "dewPointC": -14.5,
+          "windSpeedMps": 5.5,
+          "windDirectionDeg": 257
+        }
+      ],
+      "derived": {
+        "boundaryLayerTopM": 1100,
+        "thermalVelocityMps": 0,
+        "cloudBaseM": 1335.8,
+        "usableLiftTopM": null
+      }
+    }
+  ]
+}

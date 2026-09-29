@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "launches": {
+    "cervidae-peak": {
+      "facingDeg": 315,
+      "windArcHalfWidthDeg": 45,
+      "windMinMph": 5,
+      "windMaxMph": 15,
+      "gustMaxMph": 20,
+      "region": "Boise, ID",
+      "notes": ""
+    }
+  }
+}

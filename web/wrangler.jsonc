@@ -1,0 +1,36 @@
+{
+  // Cloudflare Worker for the public site and the admin API.
+  // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "paragliding-meteograms",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    // Everything else is a static file served without invoking the Worker.
+    "run_worker_first": ["/data/*", "/api/*"]
+  },
+  "r2_buckets": [
+    {
+      "binding": "DATA",
+      // Must match the METEO_R2_BUCKET repository variable used by the forecast workflows.
+      "bucket_name": "paragliding-meteograms-data"
+    }
+  ],
+  "vars": {
+    "GITHUB_REPO": "RobertojonesFAI/ParaglidingMeteograms",
+    "GITHUB_BRANCH": "main",
+    // Fill these in after creating the Cloudflare Access application for /admin (see README).
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    // Optional comma-separated allowlist on top of the Access policy.
+    "ADMIN_EMAILS": ""
+  },
+  // Secrets (set with `wrangler secret put` or in the dashboard, never in this file):
+  //   GITHUB_TOKEN  fine-grained token with Contents read/write on this repository only
+  "observability": {
+    "enabled": true
+  }
+}

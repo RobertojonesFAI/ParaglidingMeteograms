@@ -1,0 +1,45 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="About" current="about" description="What the forecasts on this site show and where they come from.">
+  <h1>About these forecasts</h1>
+
+  <div class="stack" style="margin-top:20px">
+    <section class="card">
+      <h2>Soaring meteogram</h2>
+      <p style="margin-top:8px">
+        Weather models forecast the whole atmosphere above each launch. The meteogram shows, hour by hour, how high thermals
+        should reach, where the cloud base is, how stable the air is, and the wind at every height. It is built with
+        <a href="https://meteo.azohra.com/">meteo by Azohra</a> from NOAA's HRRR (3 km, 2 days), RRFS (3 km, 3.5 days) and
+        GFS (25 km, up to 16 days) models. New model runs are published every six hours.
+      </p>
+      <p style="margin-top:8px">
+        A 3 km model sees a smoothed mountain, so its ground is often lower than the real launch. The launch elevation line
+        on the chart is measured from terrain data, not taken from the model.
+        <a href="https://meteo.azohra.com/docs/briefing/reading-a-meteogram/">Learn to read every mark on the chart</a>.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>National Weather Service forecast</h2>
+      <p style="margin-top:8px">
+        The official forecast issued by the National Weather Service for the launch's 2.5 km grid cell — the same data as the
+        hourly graph on <a href="https://www.weather.gov/">weather.gov</a>. It is refreshed every hour.
+      </p>
+      <ul style="margin-top:8px">
+        <li><strong>Mixing height</strong>: how deep the air near the ground is being stirred; a rough ceiling for thermals.</li>
+        <li><strong>Transport wind</strong>: the average wind through that mixed layer; what you will feel once you climb out.</li>
+        <li><strong>Launch window arrows</strong>: green when the surface wind blows from the directions the launch works in.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Fly safe</h2>
+      <p style="margin-top:8px">
+        Forecasts are model output and forecaster judgment, not observations. They can be wrong about timing, wind and
+        storms. Always check real conditions at launch, respect local site rules, and fly within your own limits.
+      </p>
+    </section>
+  </div>
+</Base>

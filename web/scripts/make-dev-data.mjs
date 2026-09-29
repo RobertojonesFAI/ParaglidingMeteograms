@@ -1,0 +1,281 @@
+// Builds the local sample dataset served at /data during `pnpm dev`.
+//
+// Every document is synthetic: the meteogram profiles are meteo's
+// "convective-cycle" scenario re-timed onto today's local days for each launch
+// in ../forecasts/sites.json, and the NWS documents come from a made-up grid
+// run through the same builder the NWS workflow uses. Each document is checked
+// with the contract parsers the site uses in production.
+//
+// Usage: node scripts/make-dev-data.mjs [--out dev-data]
+
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { parseArgs } from "node:util";
+import {
+  parseForecastManifestJson,
+  parseModelCatalogueJson,
+  parseRunsIndexJson,
+  parseSiteContextJson,
+  parseSiteForecastJson,
+  parseSitesCatalogueJson,
+  siteForecastSchema,
+} from "@azohra/meteo.briefing/contract";
+import { buildManifest, buildSiteDocument, paths as nwsPaths } from "../../forecasts/scripts/lib/nws.mjs";
+
+const { values: args } = parseArgs({ options: { out: { type: "string", default: "dev-data" } } });
+const out = resolve(args.out);
+const HOUR = 3_600_000;
+const HEIGHT_SHIFT_M = 480; // scenario terrain 900 m -> sample launch terrain 1380 m
+const LAUNCH_ELEVATION_M = 1480;
+
+const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf-8"));
+const sites = readJson("../../forecasts/sites.json");
+const models = readJson("../dev-data-src/models.json");
+const scenario = readJson("../dev-data-src/convective-cycle.profile.json");
+
+function write(key, value, parse) {
+  const text = `${JSON.stringify(value, null, 1)}\n`;
+  if (parse && parse(text) === null) throw new Error(`${key} fails the contract guard`);
+  const file = join(out, key);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, text);
+}
+
+// Local midnight today in a time zone, as epoch ms (good to the hour).
+function localMidnight(timeZone, now) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit" })
+      .formatToParts(new Date(now))
+      .map((p) => [p.type, p.value]),
+  );
+  return Math.floor(now / HOUR) * HOUR - Number(parts.hour) * HOUR;
+}
+
+const localHour = (timeZone, t) =>
+  Number(new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", hour: "2-digit" }).format(new Date(t)));
+
+const shiftHeight = (value) => (typeof value === "number" ? Math.round((value + HEIGHT_SHIFT_M) * 10) / 10 : value);
+
+// One synthetic profile hour for launch-local hour L on day index d.
+function profileHour(t, timeZone, day) {
+  const L = localHour(timeZone, t);
+  const source = scenario.hours[Math.min(9, Math.max(0, L - 9))];
+  const hour = structuredClone(source);
+  hour.validAt = new Date(t).toISOString().replace(".000Z", "Z");
+  const windy = day % 2 === 1;
+  const turn = (deg) => (windy ? (deg + 130) % 360 : deg); // day 2: north-westerly flow
+  const blow = (mps) => (windy ? Math.round(mps * 1.5 * 100) / 100 : mps);
+  hour.surface.windDirectionDeg = turn(hour.surface.windDirectionDeg);
+  hour.surface.windSpeedMps = blow(hour.surface.windSpeedMps);
+  if (typeof hour.surface.windGustMps === "number") hour.surface.windGustMps = blow(hour.surface.windGustMps);
+  for (const level of hour.levels) {
+    level.heightM = shiftHeight(level.heightM);
+    level.windDirectionDeg = turn(level.windDirectionDeg);
+    level.windSpeedMps = blow(level.windSpeedMps);
+  }
+  for (const key of ["boundaryLayerTopM", "cloudBaseM", "usableLiftTopM"]) hour.derived[key] = shiftHeight(hour.derived[key]);
+  return hour;
+}
+
+function profile(model, site, referenceTime, stepHours, count) {
+  const entry = models.models.find((m) => m.slug === model);
+  const hours = [];
+  const midnight = localMidnight(site.timeZone, referenceTime);
+  for (let i = 1; i <= count; i += 1) {
+    const t = referenceTime + i * stepHours * HOUR;
+    hours.push(profileHour(t, site.timeZone, Math.floor((t - midnight) / (24 * HOUR))));
+  }
+  const doc = {
+    schemaVersion: 2,
+    model,
+    run: { referenceTime: iso(referenceTime), generatedAt: iso(referenceTime + 2 * HOUR) },
+    site: {
+      id: site.slug,
+      name: site.name,
+      latitude: site.latitude,
+      longitude: site.longitude,
+      modelElevationM: shiftHeight(scenario.site.modelElevationM),
+      timeZone: site.timeZone,
+    },
+    semantics: { gust: entry.capabilities.gust, precipitation: entry.capabilities.precipitation },
+    hours,
+  };
+  const check = siteForecastSchema.safeParse(doc);
+  if (!check.success) throw new Error(`${model}/${site.slug}: ${check.error.message}`);
+  return doc;
+}
+
+const iso = (t) => new Date(t).toISOString().replace(".000Z", "Z");
+
+// ── build ────────────────────────────────────────────────────────────────
+
+rmSync(out, { recursive: true, force: true });
+const now = Date.now();
+const zone = sites.sites[0]?.timeZone ?? "America/Boise";
+// Runs start at local midnight so the sample covers whole local days.
+const hrrrRef = localMidnight(zone, now);
+const gfsRef = hrrrRef;
+const runs = {};
+
+write("sites.json", sites, parseSitesCatalogueJson);
+write("models.json", models, parseModelCatalogueJson);
+
+for (const [model, ref, step, count] of [["hrrr-conus", hrrrRef, 1, 48], ["gfs", gfsRef, 3, 56]]) {
+  for (const site of sites.sites) write(`${model}/sites/${site.slug}.json`, profile(model, site, ref, step, count), parseSiteForecastJson);
+  const generatedAt = new Date(ref + 2 * HOUR).toISOString();
+  write(
+    `${model}/manifest.json`,
+    {
+      schemaVersion: 1,
+      model,
+      referenceTime: iso(ref),
+      generatedAt,
+      firstForecastHour: step,
+      lastForecastHour: step * count,
+      forecastHours: count,
+      sites: sites.sites.map((s) => ({ slug: s.slug, name: s.name })),
+      stats: { downloadBytes: 0, downloads: 0, durationMs: 0, retries: 0 },
+    },
+    parseForecastManifestJson,
+  );
+  runs[model] = { referenceTime: iso(ref), generatedAt };
+}
+write("runs.json", { schemaVersion: 1, runs }, parseRunsIndexJson);
+
+write(
+  "site-context.json",
+  {
+    schemaVersion: 3,
+    generatedAt: iso(hrrrRef),
+    sources: [
+      {
+        id: "glo30",
+        product: "Copernicus GLO-30 DEM",
+        kind: "surfaceModel",
+        resolutionM: 30,
+        licence: "Copernicus DEM licence",
+        attribution: "Sample data",
+        url: "https://registry.opendata.aws/copernicus-dem/",
+      },
+      {
+        id: "worldcover2021",
+        product: "ESA WorldCover 10 m 2021 v200",
+        kind: "landCover",
+        resolutionM: 10,
+        licence: "CC-BY 4.0",
+        attribution: "Sample data",
+        url: "https://zenodo.org/records/7254221",
+      },
+    ],
+    sites: Object.fromEntries(
+      sites.sites.map((s) => [
+        s.slug,
+        {
+          point: { latitude: s.latitude, longitude: s.longitude },
+          elevation: { source: "glo30", elevationM: LAUNCH_ELEVATION_M },
+          terrain: {
+            source: "glo30",
+            elevationM: LAUNCH_ELEVATION_M,
+            slopeDeg: 18,
+            aspectDeg: 315,
+            relief: [{ radiusKm: 1, minM: 1100, maxM: 1520, percentile: 85 }],
+          },
+          landCover: {
+            source: "worldcover2021",
+            atLaunch: "shrubland",
+            fractions: [{ radiusKm: 1, byClass: { shrubland: 0.8, grassland: 0.2 } }],
+          },
+        },
+      ]),
+    ),
+  },
+  parseSiteContextJson,
+);
+
+// ── NWS (same builder as forecasts/scripts/nws.mjs) ─────────────────────
+
+function nwsGrid(site) {
+  const start = localMidnight(site.timeZone, now);
+  const layers = {};
+  const add = (name, uom, fn) => {
+    layers[name] = {
+      uom,
+      values: Array.from({ length: 7 * 24 }, (_, i) => {
+        const t = start + i * HOUR;
+        return { validTime: `${new Date(t).toISOString().replace(".000Z", "+00:00")}/PT1H`, value: fn(localHour(site.timeZone, t), Math.floor(i / 24)) };
+      }),
+    };
+  };
+  const day = (L) => Math.max(0, Math.sin(((L - 6) / 14) * Math.PI)); // 0 at night, 1 mid-afternoon
+  add("temperature", "wmoUnit:degC", (L, d) => Math.round((8 + 16 * day(L) - d) * 10) / 10);
+  add("dewpoint", "wmoUnit:degC", () => 1.5);
+  add("relativeHumidity", "wmoUnit:percent", (L) => Math.round(70 - 45 * day(L)));
+  add("skyCover", "wmoUnit:percent", (L, d) => (d === 2 ? 55 : Math.round(10 + 25 * day(L))));
+  add("windDirection", "wmoUnit:degree_(angle)", (L, d) => (L >= 10 && L <= 19 ? (d % 2 ? 300 : 325) : 140));
+  add("windSpeed", "wmoUnit:km_h-1", (L, d) => Math.round((6 + 16 * day(L) * (d % 2 ? 1.6 : 1)) * 10) / 10);
+  add("windGust", "wmoUnit:km_h-1", (L, d) => Math.round((10 + 26 * day(L) * (d % 2 ? 1.7 : 1)) * 10) / 10);
+  add("probabilityOfPrecipitation", "wmoUnit:percent", (L, d) => (d === 2 && L >= 13 && L <= 18 ? 30 : 5));
+  add("probabilityOfThunder", "wmoUnit:percent", (L, d) => (d === 2 && L >= 13 && L <= 18 ? 20 : 0));
+  add("lightningActivityLevel", "nwsUnit:n/a", (L, d) => (d === 2 && L >= 13 && L <= 18 ? 3 : 1));
+  add("mixingHeight", "wmoUnit:m", (L, d) => Math.round(150 + 2700 * day(L) * (d === 2 ? 0.8 : 1)));
+  add("transportWindDirection", "wmoUnit:degree_(angle)", (L, d) => (d % 2 ? 295 : 250));
+  add("transportWindSpeed", "wmoUnit:km_h-1", (L, d) => Math.round((10 + 12 * day(L) * (d % 2 ? 1.8 : 1)) * 10) / 10);
+  add("ceilingHeight", "wmoUnit:m", (L, d) => (d === 2 ? 3000 : null));
+  add("visibility", "wmoUnit:m", () => 16093);
+  add("weather", "nwsUnit:n/a", (L, d) =>
+    d === 2 && L >= 13 && L <= 18 ? [{ coverage: "slight_chance", weather: "thunderstorms", intensity: null, attributes: [] }] : [{ coverage: null, weather: null, intensity: null, attributes: [] }],
+  );
+  return {
+    properties: { updateTime: new Date(now - HOUR).toISOString(), elevation: { unitCode: "wmoUnit:m", value: 1402 }, ...layers },
+  };
+}
+
+const siteEntries = [];
+for (const site of sites.sites) {
+  const point = { properties: { gridId: "BOI", gridX: 150, gridY: 86 } };
+  const start = localMidnight(site.timeZone, now);
+  const hourly = {
+    properties: {
+      updateTime: new Date(now - HOUR).toISOString(),
+      periods: Array.from({ length: 7 * 24 }, (_, i) => ({
+        startTime: new Date(start + i * HOUR).toISOString(),
+        shortForecast: Math.floor(i / 24) === 2 && i % 24 >= 13 && i % 24 <= 18 ? "Slight Chance T-storms" : "Sunny",
+      })),
+    },
+  };
+  const forecast = {
+    properties: {
+      updateTime: new Date(now - HOUR).toISOString(),
+      periods: ["Today", "Tonight", "Tomorrow", "Tomorrow Night"].map((name, i) => ({
+        name,
+        startTime: new Date(start + (6 + i * 12) * HOUR).toISOString(),
+        endTime: new Date(start + (18 + i * 12) * HOUR).toISOString(),
+        isDaytime: i % 2 === 0,
+        shortForecast: i % 2 ? "Clear" : "Sunny",
+        detailedForecast: `Sample text, not a forecast. ${i % 2 ? "Clear, with a low around 45." : "Sunny, with a high near 75. Northwest wind 5 to 10 mph."}`,
+      })),
+    },
+  };
+  const doc = buildSiteDocument({ site, point, grid: nwsGrid(site), hourly, forecast, now });
+  write(nwsPaths.site(site.slug), doc);
+  siteEntries.push({ slug: site.slug, ok: true, office: "BOI", updateTime: doc.updateTime });
+}
+write(nwsPaths.office("BOI"), {
+  schemaVersion: 1,
+  source: "National Weather Service (NOAA), api.weather.gov",
+  generatedAt: new Date(now).toISOString(),
+  office: "BOI",
+  products: {
+    afd: {
+      id: "sample",
+      productCode: "AFD",
+      productName: "Area Forecast Discussion",
+      issuanceTime: new Date(now - 3 * HOUR).toISOString(),
+      text: "SAMPLE AREA FORECAST DISCUSSION\nThis is sample text for local development. It is not a forecast.\n\n.SHORT TERM...\nHigh pressure keeps skies mostly clear. Afternoon northwest winds 10 to 15 mph over the ridges.\n",
+    },
+    srg: null,
+  },
+});
+write(nwsPaths.manifest(), buildManifest({ now, sites: siteEntries, offices: [{ office: "BOI", afdIssuanceTime: new Date(now - 3 * HOUR).toISOString(), srgIssuanceTime: null }] }));
+
+console.log(`✓ Sample dataset for ${sites.sites.length} launch(es) written to ${out}`);

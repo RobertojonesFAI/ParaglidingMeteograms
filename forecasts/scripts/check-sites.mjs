@@ -5,11 +5,13 @@
 // 2. Operator rules the engine does not check: unique lowercase-hyphenated
 //    slugs, a valid IANA time zone, and a warning when a launch falls outside
 //    HRRR/RRFS coverage (the contiguous US).
+// 3. When the website is present, every launch has an entry in
+//    web/src/data/launches.json and every entry there has a launch here.
 //
 // Usage: node scripts/check-sites.mjs [path/to/sites.json]
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { parseSites } from "@azohra/meteo.forecast";
 
 const path = resolve(process.argv[2] ?? "sites.json");
@@ -46,6 +48,18 @@ for (const site of sites) {
 }
 
 for (const warning of warnings) console.warn(`⚠ ${warning}`);
+
+const detailsPath = resolve(dirname(path), "../web/src/data/launches.json");
+if (existsSync(detailsPath)) {
+  const details = JSON.parse(readFileSync(detailsPath, "utf-8")).launches ?? {};
+  for (const site of sites) {
+    if (!(site.slug in details)) errors.push(`"${site.slug}": missing from web/src/data/launches.json (add its facing and wind limits)`);
+  }
+  for (const slug of Object.keys(details)) {
+    if (!seen.has(slug)) errors.push(`"${slug}": in web/src/data/launches.json but not in sites.json`);
+  }
+}
+
 if (errors.length > 0) {
   for (const error of errors) console.error(`✗ ${error}`);
   process.exit(1);

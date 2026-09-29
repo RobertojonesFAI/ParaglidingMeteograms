@@ -1,0 +1,38 @@
+{
+  "name": "paragliding-meteograms-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev-data": "node scripts/make-dev-data.mjs",
+    "dev": "node scripts/make-dev-data.mjs && astro dev",
+    "build": "astro build",
+    "check": "astro check && tsc -p worker/tsconfig.json",
+    "test": "node --test test/*.test.ts",
+    "preview": "astro build && wrangler dev",
+    "deploy": "astro build && wrangler deploy"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@azohra/meteo.briefing": "0.6.2",
+    "astro": "7.3.5",
+    "leaflet": "1.9.4"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@cloudflare/workers-types": "5.20260929.1",
+    "@types/leaflet": "1.9.22",
+    "typescript": "5.9.3",
+    "wrangler": "4.143.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd",
+      "sharp"
+    ]
+  }
+}

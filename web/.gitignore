@@ -1,0 +1,6 @@
+dist/
+dev-data/
+.astro/
+.wrangler/
+node_modules/
+.dev.vars
