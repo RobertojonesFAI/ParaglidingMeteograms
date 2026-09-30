@@ -9,6 +9,15 @@
       "gustMaxMph": 20,
       "region": "Boise, ID",
       "notes": ""
+    },
+    "king-mountain": {
+      "facingDeg": 225,
+      "windArcHalfWidthDeg": 45,
+      "windMinMph": 5,
+      "windMaxMph": 15,
+      "gustMaxMph": 20,
+      "region": "Moore, ID",
+      "notes": "Lower launch (7,400 ft), the paraglider launch; faces SW. Big-air site: strong thermals, dust devils and high density altitude. Stay out of the INL restricted airspace to the south and east."
     }
   }
 }

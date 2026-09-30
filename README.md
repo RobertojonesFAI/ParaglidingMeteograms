@@ -49,6 +49,7 @@ something new, and records each run in `status/refresh.json`.
 | Slug | Name | Latitude | Longitude | Time zone |
 | --- | --- | --- | --- | --- |
 | `cervidae-peak` | Cervidae Peak | 43.62332 | -115.98076 | America/Boise |
+| `king-mountain` | King Mountain | 43.76382 | -113.29149 | America/Boise |
 
 ## Models
 

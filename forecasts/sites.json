@@ -7,6 +7,13 @@
       "latitude": 43.62332,
       "longitude": -115.98076,
       "timeZone": "America/Boise"
+    },
+    {
+      "slug": "king-mountain",
+      "name": "King Mountain",
+      "latitude": 43.76382,
+      "longitude": -113.29149,
+      "timeZone": "America/Boise"
     }
   ]
 }
