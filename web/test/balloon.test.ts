@@ -89,4 +89,6 @@ test("a flight the archive missed comes from the Soaring Forecast's table, in ti
   const balloons = choices(doc, SRG, TZ).filter((c) => c.kind === "balloon");
   assert.deepEqual(balloons.map((c) => [c.validAt, c.hasDewPoint]), [["2026-09-30T00:00:00Z", true], ["2026-09-29T12:00:00Z", false]]);
   assert.equal(balloons[1].start.source, "forecast-high");
+  const r = readChoice(balloons[0], SRG, 1268, TZ);
+  assert.match(r.findings[0].text, /^At 6:00 PM, with 75 °F at the ground, a thermal would reach about [\d,]+ ft\. Earlier, in the warmer afternoon, thermals went higher/);
 });

@@ -186,6 +186,14 @@ export function choices(doc: RaobDocument | null, srg: Srg | null, timeZone: str
   return out;
 }
 
+/** An evening flight: the ground has already cooled, so the afternoon's thermals went higher than a thermal now would. */
+function eveningText(s: Sounding, top: number, choice: Choice, time: Intl.DateTimeFormat) {
+  const lid = s.inversions.find((l) => !l.grounded && l.baseM > top && l.baseM < top + 1500);
+  return `At ${time.format(new Date(choice.validAt))}, with ${f(choice.start.temperatureC)} °F at the ground, a thermal would reach about ${ftText(top)}. Earlier, in the warmer afternoon, thermals went higher${
+    lid ? `, likely up to the inversion at ${ftText(lid.baseM)}` : ""
+  }.`;
+}
+
 function liWords(li: number): { text: string; tone: Finding["tone"] } {
   if (li >= 3) return { text: "very stable aloft: no storm risk", tone: "good" };
   if (li >= 0) return { text: "stable aloft: storms unlikely", tone: "good" };
@@ -212,7 +220,7 @@ export function readChoice(choice: Choice, srg: Srg | null, launchM: number | nu
       ? `If it warms to the forecast high of ${f(choice.start.temperatureC)} °F, thermals should rise to about ${ftText(top)} (${feet(top - station).toLocaleString("en-US")} ft above the station).`
       : choice.kind === "model"
         ? `At ${time.format(new Date(choice.validAt))} the NWS model has thermals from ${f(choice.start.temperatureC)} °F at the ground reaching about ${ftText(top)}.`
-        : `The air was mixed up to about ${ftText(top)} when the balloon went up: roughly how high thermals reached.`;
+        : eveningText(s, top, choice, time);
     let text = lead;
     if (fromHigh && srg?.maxThermalHeightFt) text += ` The NWS puts it at ${srg.maxThermalHeightFt.toLocaleString("en-US")} ft${srg.maxLiftFpm ? `, with lift up to ${srg.maxLiftFpm} ft/min` : ""}.`;
     const tone = fromHigh && srg?.soaringIndex ? SOARING_TONE[srg.soaringIndex.toLowerCase()] ?? "neutral" : "neutral";
@@ -268,7 +276,7 @@ export function readChoice(choice: Choice, srg: Srg | null, launchM: number | nu
       tone: "neutral",
     });
   }
-  const lid = s.inversions.find((l) => !l.grounded && l.baseM <= (top ?? station) + 600);
+  const lid = s.inversions.find((l) => !l.grounded && l.baseM <= (top ?? station) + (morning ? 600 : 1500));
   if (lid) findings.push({ key: "lid", title: lid.kind === "inversion" ? "Inversion" : "Stable layer", text: `${lid.kind === "inversion" ? "An inversion" : "A stable layer"} from ${ftText(lid.baseM)} to ${ftText(lid.topM)} caps the thermals.`, tone: "neutral" });
 
   // Wind
