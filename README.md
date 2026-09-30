@@ -146,7 +146,10 @@ Forecast's own balloon table is used.
 
 Each launch page has a map of the sunlight (W/m²) reaching the ground within 15 km of the
 launch, with a slider from sunrise to sunset in 15-minute steps, a play button, and the day's
-curve for the launch or any spot the user taps.
+curve for the launch or any spot the user taps. A **2D / 3D** switch shows the same colours
+draped over the terrain in 3D (three.js, loaded only when the 3D view is opened), with the sun
+placed in its direction, so the slopes turned toward the sun stand out; the relief is true scale,
+or twice as tall with *Exaggerate relief*.
 
 The ground is prepared once per launch by [`forecasts/scripts/solar.mjs`](forecasts/scripts/solar.mjs)
 (run by *Publish launches*) and cut into map tiles, zoom 11 to 14:
@@ -156,7 +159,10 @@ The ground is prepared once per launch by [`forecasts/scripts/solar.mjs`](foreca
 - **sky-view factor** of every pixel (how much open sky it sees, for diffuse light);
 - **horizon angles** in 18 directions on a ~28 m grid, traced out to 20 km over the 3DEP
   1 arc-second model (~30 m) with earth curvature and refraction, so ridges up to 20 km away
-  cast their shadows.
+  cast their shadows;
+- **relief** for the 3D view (`relief-v1.bin.gz`): 3DEP elevation on the corners of the zoom-11
+  pixels (~55 m apart), as 16-bit decimetres, row-delta filtered and gzipped (~0.3 MB). When
+  only the relief is missing or its `RELIEF_VERSION` changes, just the relief is rebuilt.
 
 Outside 3DEP's coverage the builder falls back to Copernicus GLO-30 for both. A launch takes
 about 2-3 minutes and ~65 MB of tiles (~450 tiles of 120-250 KB); tiles are only rebuilt when a
@@ -254,6 +260,7 @@ ecmwf/manifest.json                  what the latest ECMWF fetch published, and 
 ecmwf/sites/<slug>.json              one launch's ECMWF IFS hourly forecast
 solar/<slug>/index.json              sunlight-map terrain: tile ranges, encoding, sources, launch summary
 solar/<slug>/<generation>/<z>/<x>/<y>.bin.gz   sunlight-map terrain tiles (immutable; the generation id changes with the inputs)
+solar/<slug>/<generation>/relief-v1.bin.gz      heights for the sunlight map's 3D view (immutable)
 ```
 
 The model document schemas are described in the

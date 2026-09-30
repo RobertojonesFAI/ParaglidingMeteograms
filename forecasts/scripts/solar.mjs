@@ -1,7 +1,8 @@
-// Builds the terrain tiles behind each launch page's sunlight map
-// (scripts/lib/solar.mjs explains what they hold) and, with --sync, publishes
-// them to the bucket for every launch whose published tiles are missing or
-// were built from different inputs.
+// Builds the terrain tiles behind each launch page's sunlight map, and the
+// relief its 3D view is drawn on (scripts/lib/solar.mjs explains both), and,
+// with --sync, publishes them to the bucket for every launch whose published
+// tiles are missing or were built from different inputs. When only the relief
+// is missing or outdated, just the relief is built and added.
 //
 // Elevation sources (read over HTTP, only the windows needed):
 //   surface   USGS 3DEP 1/3 arc-second (~10 m)
@@ -20,7 +21,7 @@ import { parseArgs } from "node:util";
 import { parseSites } from "@azohra/meteo.forecast";
 import { bucketFromEnv } from "./lib/bucket.mjs";
 import { mosaic, tilesAround } from "./lib/mosaic.mjs";
-import { DEFAULT_MAX_DISTANCE_KM, DEFAULT_RADIUS_KM, buildSolarTerrain, domainFor, expandBounds, indexIsFresh } from "./lib/solar.mjs";
+import { DEFAULT_MAX_DISTANCE_KM, DEFAULT_RADIUS_KM, buildRelief, buildSolarTerrain, domainFor, expandBounds, indexIsFresh, reliefIsFresh } from "./lib/solar.mjs";
 
 const engineDir = dirname(createRequire(import.meta.url).resolve("@azohra/meteo.forecast/package.json"));
 const T = await import(pathToFileURL(join(engineDir, "dist/terrain.js")).href);
@@ -131,14 +132,31 @@ async function main() {
   const warn = (m) => console.warn(m);
   const summary = [];
 
+  const immutable = { contentType: "application/octet-stream", cacheControl: "public, max-age=31536000, immutable" };
   for (const site of sites) {
     const indexKey = `solar/${site.slug}/index.json`;
     if (bucket && !values.force) {
       const existing = await bucket.get(indexKey);
       const published = existing ? JSON.parse(existing.toString("utf8")) : null;
       if (indexIsFresh(published, site, { radiusKm, maxDistanceKm })) {
-        log(`${site.slug}: sunlight terrain is current (${published.generation})`);
-        summary.push(`| ${site.name} | current | ${published.tiles.count} | – |`);
+        if (reliefIsFresh(published)) {
+          log(`${site.slug}: sunlight terrain is current (${published.generation})`);
+          summary.push(`| ${site.name} | current | ${published.tiles.count} | – |`);
+          continue;
+        }
+        // The tiles are current; only the 3D relief is missing. It needs just
+        // the surface model the tiles were built from, not the horizons.
+        const started = Date.now();
+        const source = Object.values(SOURCES).find((s) => s.id === published.sources?.surface?.id) ?? SOURCES.usgs13;
+        log(`${site.slug}: adding the 3D relief from ${source.name}`);
+        const domain = domainFor(site.latitude, site.longitude, radiusKm);
+        const fine = await readGrid(source, expandBounds(domain.bounds, 100), { log });
+        const relief = buildRelief(fine, domain, published.generation);
+        await bucket.put(`solar/${site.slug}/${relief.meta.path}`, relief.body, immutable);
+        await bucket.put(indexKey, JSON.stringify({ ...published, relief: relief.meta }), { cacheControl: "public, max-age=300" });
+        const r = relief.meta;
+        console.log(`::notice title=${site.slug} 3D relief::${r.width} x ${r.height} heights, ${r.minM}–${r.maxM} m, ${(r.bytes / 1e3).toFixed(0)} kB`);
+        summary.push(`| ${site.name} | relief added | ${published.tiles.count} | ${Math.round((Date.now() - started) / 1000)} s |`);
         continue;
       }
     }
@@ -146,19 +164,20 @@ async function main() {
     const started = Date.now();
     log(`${site.slug}: reading elevation`);
     const terrain = await readTerrain(site, { radiusKm, maxDistanceKm, log, warn });
-    const { index, tiles } = buildSolarTerrain(site, { ...terrain, radiusKm, maxDistanceKm, log });
+    const { index, tiles, relief } = buildSolarTerrain(site, { ...terrain, radiusKm, maxDistanceKm, log });
     const l = index.launch;
     log(`${site.slug}: launch ${l.elevationM} m, slope ${l.slopeDeg}° facing ${l.aspectDeg}°, sky view ${l.skyViewFactor}; horizon E ${l.horizonDeg[4]}° S ${l.horizonDeg[9]}° W ${l.horizonDeg[13]}°`);
-    console.log(`::notice title=${site.slug} sunlight terrain::launch ${l.elevationM} m, slope ${l.slopeDeg} deg facing ${l.aspectDeg} deg, sky view ${l.skyViewFactor}, horizons (every 20 deg from N) ${l.horizonDeg.join(" ")}; ${index.tiles.count} tiles, ${(index.tiles.bytes / 1e6).toFixed(1)} MB`);
+    console.log(`::notice title=${site.slug} sunlight terrain::launch ${l.elevationM} m, slope ${l.slopeDeg} deg facing ${l.aspectDeg} deg, sky view ${l.skyViewFactor}, horizons (every 20 deg from N) ${l.horizonDeg.join(" ")}; ${index.tiles.count} tiles, ${(index.tiles.bytes / 1e6).toFixed(1)} MB; relief ${index.relief.width} x ${index.relief.height}, ${index.relief.minM}–${index.relief.maxM} m`);
 
     if (bucket) {
       let done = 0;
       await inBatches(tiles, 16, async (tile) => {
         const key = `solar/${site.slug}/${index.tiles.path.replace("{z}", tile.z).replace("{x}", tile.x).replace("{y}", tile.y)}`;
-        await bucket.put(key, tile.body, { contentType: "application/octet-stream", cacheControl: "public, max-age=31536000, immutable" });
+        await bucket.put(key, tile.body, immutable);
         done += 1;
         if (done % 100 === 0) log(`  uploaded ${done}/${tiles.length}`);
       });
+      await bucket.put(`solar/${site.slug}/${index.relief.path}`, relief.body, immutable);
       // The index goes last: readers only find tiles that are already there.
       await bucket.put(indexKey, JSON.stringify(index), { cacheControl: "public, max-age=300" });
     } else {
@@ -168,6 +187,7 @@ async function main() {
         mkdirSync(dir, { recursive: true });
         writeFileSync(join(dir, `${tile.y}.bin.gz`), tile.body);
       }
+      writeFileSync(join(base, index.relief.path), relief.body);
       writeFileSync(join(base, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
     }
     const seconds = Math.round((Date.now() - started) / 1000);

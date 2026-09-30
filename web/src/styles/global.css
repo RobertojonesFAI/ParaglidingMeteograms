@@ -847,6 +847,10 @@ fieldset {
   cursor: pointer;
 }
 
+.sun-check[hidden] {
+  display: none;
+}
+
 .sun-check input {
   width: 18px;
   height: 18px;
@@ -1270,4 +1274,84 @@ fieldset {
   margin: 14px 0 0;
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* ── sunlight: 2D / 3D ────────────────────────────────────────────────── */
+
+.sun-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 10px;
+}
+
+.sun-3d {
+  position: relative;
+  height: 460px;
+  border-radius: var(--radius);
+  border: 1px solid var(--ring);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.sun-3d canvas {
+  display: block;
+  touch-action: none;
+}
+
+.sun-3d-status[hidden] {
+  display: none;
+}
+
+.sun-3d-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+}
+
+.sun-3d-sun {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  margin: 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  pointer-events: none;
+}
+
+.sun-3d-sun:empty {
+  display: none;
+}
+
+.sun-3d-hint {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  right: 8px;
+  margin: 0;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .sun-3d {
+    height: 360px;
+  }
 }

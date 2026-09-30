@@ -2,8 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
 import {
-  AZIMUTHS_DEG, HORIZON_BORDER, HORIZON_CELLS, HORIZON_STEP_DEG, MAX_ZOOM, MIN_ZOOM, TILE_BYTES, TILE_SIZE,
-  buildSolarTerrain, deltaDecode, deltaEncode, domainFor, gridFromFunction, halveLevel, indexIsFresh, latToY, lonToX,
+  AZIMUTHS_DEG, HORIZON_BORDER, HORIZON_CELLS, HORIZON_STEP_DEG, MAX_ZOOM, MIN_ZOOM, RELIEF_VERSION, RELIEF_ZOOM, TILE_BYTES, TILE_SIZE,
+  buildRelief, buildSolarTerrain, decodeRelief, deltaDecode, deltaEncode, domainFor, gridFromFunction, halveLevel, indexIsFresh, latToY, lonToX,
+  reliefIsFresh,
   metresPerDegree, metresPerPixel, rayDistances, sampleGrid, skyViewFactor, surfaceLevel, traceHorizons, xToLon, yToLat,
 } from "./solar.mjs";
 import { usgsUrl } from "../solar.mjs";
@@ -175,6 +176,43 @@ test("a full build has every zoom, a stable generation and a readable launch sum
   assert.ok(!indexIsFresh(index, { ...site, longitude: LON + 0.01 }, { radiusKm: 1, maxDistanceKm: 2 }));
   assert.ok(!indexIsFresh(index, site, { radiusKm: 15, maxDistanceKm: 2 }));
   assert.ok(!indexIsFresh(null, site, {}));
+});
+
+test("the relief covers the square corner to corner and decodes to the elevation", () => {
+  const elevation = (lat, lon) => {
+    const p = local(lat, lon);
+    return 1300 + 0.3 * p.east - 0.2 * p.north + 60 * Math.sin(p.east / 400) * Math.cos(p.north / 300);
+  };
+  const { fine, coarse } = grids(elevation, { radiusKm: 1, maxDistanceKm: 2 });
+  const sources = { surface: { id: "synthetic-fine" }, horizon: { id: "synthetic-coarse" } };
+  const site = { slug: "cervidae-peak", latitude: LAT, longitude: LON };
+  const { index, relief } = buildSolarTerrain(site, { fine, coarse, sources, radiusKm: 1, maxDistanceKm: 2 });
+  const meta = index.relief;
+  assert.equal(meta.version, RELIEF_VERSION);
+  assert.equal(meta.path, `${index.generation}/relief-v${RELIEF_VERSION}.bin.gz`);
+  assert.ok(reliefIsFresh(index));
+  assert.ok(!reliefIsFresh({ ...index, relief: undefined }));
+
+  // Corners of the zoom-11 pixels spanning exactly the zoom-14 square.
+  const d = domainFor(LAT, LON, 1);
+  const f = 2 ** (MAX_ZOOM - RELIEF_ZOOM);
+  assert.equal(meta.x0 * f, d.x0);
+  assert.equal((meta.x0 + meta.width - 1) * f, d.x1);
+  assert.equal((meta.y0 + meta.height - 1) * f, d.y1);
+
+  const heights = decodeRelief(gunzipSync(relief.body), meta);
+  assert.equal(heights.length, meta.width * meta.height);
+  for (const [i, j] of [[0, 0], [meta.width - 1, meta.height - 1], [3, 2]]) {
+    const expected = elevation(yToLat(meta.y0 + j, RELIEF_ZOOM), xToLon(meta.x0 + i, RELIEF_ZOOM));
+    assert.ok(Math.abs(heights[j * meta.width + i] - expected) < 0.6, `(${i}, ${j}) ${heights[j * meta.width + i]} vs ${expected}`);
+  }
+  assert.ok(meta.minM < meta.maxM);
+
+  // Points without data decode as NaN; low ground and a steep drop survive the delta filter.
+  const holes = buildRelief({ ...fine, values: fine.values.map((v, k) => (k % 7 === 0 ? Number.NaN : v - 1700)) }, d, "g");
+  const decoded = decodeRelief(gunzipSync(holes.body), holes.meta);
+  assert.ok(decoded.some((v) => Number.isNaN(v)));
+  assert.ok(decoded.some((v) => v < -300));
 });
 
 test("grid sampling is bilinear and refuses points outside the grid", () => {

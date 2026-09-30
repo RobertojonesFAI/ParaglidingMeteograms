@@ -481,6 +481,87 @@ export function tileRange(level) {
   ];
 }
 
+// ── Relief (the 3D view's ground) ───────────────────────────────────────────
+
+/** Version of the relief file; it is part of the file name, so a format change never meets a cached copy. */
+export const RELIEF_VERSION = 1;
+/** Relief heights sit on the corners of this zoom's pixels (about 55 m apart at 44° N). */
+export const RELIEF_ZOOM = 11;
+const RELIEF_OFFSET_M = 500;
+const RELIEF_SCALE = 10;
+
+/**
+ * Elevation on a regular Web Mercator grid over the square, for drawing the
+ * terrain in 3D: one height per corner of the zoom-11 pixels, so the grid's
+ * edges are the square's edges and the sunlight tiles drape onto it exactly.
+ *
+ * Stored as unsigned 16-bit little-endian values, (elevation + 500 m) in
+ * decimetres (0 = no data), row by row from the north-west corner, each
+ * row-delta filtered like the tiles (differences taken modulo 65536), gzipped.
+ */
+export function buildRelief(fine, domain, generation) {
+  const f = 2 ** (MAX_ZOOM - RELIEF_ZOOM);
+  const x0 = Math.floor(domain.x0 / f);
+  const y0 = Math.floor(domain.y0 / f);
+  const width = Math.ceil(domain.x1 / f) - x0 + 1;
+  const height = Math.ceil(domain.y1 / f) - y0 + 1;
+  const values = new Uint16Array(width * height);
+  let min = Infinity;
+  let max = -Infinity;
+  for (let j = 0; j < height; j += 1) {
+    const lat = yToLat(y0 + j, RELIEF_ZOOM);
+    for (let i = 0; i < width; i += 1) {
+      const v = sampleGrid(fine, lat, xToLon(x0 + i, RELIEF_ZOOM));
+      if (Number.isNaN(v)) continue;
+      values[j * width + i] = Math.min(65535, Math.max(1, Math.round((v + RELIEF_OFFSET_M) * RELIEF_SCALE)));
+      min = Math.min(min, v);
+      max = Math.max(max, v);
+    }
+  }
+  const bytes = Buffer.alloc(values.length * 2);
+  for (let k = 0; k < values.length; k += 1) {
+    const prev = k % width === 0 ? (k === 0 ? 0 : values[k - width]) : values[k - 1];
+    bytes.writeUInt16LE((values[k] - prev) & 0xffff, k * 2);
+  }
+  const body = gzipSync(bytes, { level: 9 });
+  return {
+    body,
+    meta: {
+      version: RELIEF_VERSION,
+      path: `${generation}/relief-v${RELIEF_VERSION}.bin.gz`,
+      zoom: RELIEF_ZOOM,
+      x0,
+      y0,
+      width,
+      height,
+      offsetM: RELIEF_OFFSET_M,
+      scale: RELIEF_SCALE,
+      minM: round(min, 0),
+      maxM: round(max, 0),
+      encoding: "uint16 little-endian, (elevation m + offsetM) * scale, 0 = no data; row-delta (mod 65536); gzip",
+      bytes: body.length,
+    },
+  };
+}
+
+/** Decodes a relief file's (gunzipped) bytes into heights in metres, NaN where there is no data. */
+export function decodeRelief(raw, meta) {
+  const n = meta.width * meta.height;
+  const values = new Uint16Array(n);
+  const out = new Float32Array(n);
+  for (let k = 0; k < n; k += 1) {
+    const prev = k % meta.width === 0 ? (k === 0 ? 0 : values[k - meta.width]) : values[k - 1];
+    values[k] = (raw[2 * k] | (raw[2 * k + 1] << 8)) + prev;
+    out[k] = values[k] === 0 ? Number.NaN : values[k] / meta.scale - meta.offsetM;
+  }
+  return out;
+}
+
+/** True when a published index carries the current relief. */
+export function reliefIsFresh(index) {
+  return index?.relief?.version === RELIEF_VERSION;
+}
+
 // ── Whole product ───────────────────────────────────────────────────────────
 
 /** Short content id for a set of inputs; part of the tile path so tiles can be cached forever. */
@@ -494,7 +575,7 @@ const round = (v, digits) => (Number.isFinite(v) ? Number(v.toFixed(digits)) : n
  * Builds every tile and the index for one launch.
  * @param {{ slug: string, latitude: number, longitude: number }} site
  * @param {{ fine: Grid, coarse: Grid, sources: object, radiusKm?: number, maxDistanceKm?: number, generatedAt?: string, log?: (m: string) => void }} options
- * @returns {{ index: object, tiles: { z: number, x: number, y: number, body: Buffer }[] }}
+ * @returns {{ index: object, tiles: { z: number, x: number, y: number, body: Buffer }[], relief: { meta: object, body: Buffer } }}
  */
 export function buildSolarTerrain(site, { fine, coarse, sources, radiusKm = DEFAULT_RADIUS_KM, maxDistanceKm = DEFAULT_MAX_DISTANCE_KM, generatedAt, log = () => {} }) {
   const inputs = { latitude: site.latitude, longitude: site.longitude, radiusKm, maxDistanceKm, algorithmVersion: ALGORITHM_VERSION, sources: Object.fromEntries(Object.entries(sources).map(([k, v]) => [k, v.id])) };
@@ -532,6 +613,8 @@ export function buildSolarTerrain(site, { fine, coarse, sources, radiusKm = DEFA
   }
   const gz = tiles.reduce((s, tile) => s + tile.body.length, 0);
   log(`${site.slug}: ${tiles.length} tiles, ${(gz / 1e6).toFixed(1)} MB compressed (${(rawBytes / 1e6).toFixed(0)} MB raw)`);
+  const relief = buildRelief(fine, domain, generation);
+  log(`${site.slug}: relief ${relief.meta.width} x ${relief.meta.height}, ${relief.meta.minM}–${relief.meta.maxM} m, ${(relief.body.length / 1e3).toFixed(0)} kB`);
 
   // The launch itself, for checks and for the page.
   const X = Math.floor(lonToX(site.longitude, MAX_ZOOM)) - top.x0;
@@ -576,8 +659,9 @@ export function buildSolarTerrain(site, { fine, coarse, sources, radiusKm = DEFA
       skyViewFactor: round(top.svf[o], 3),
       horizonDeg: Array.from(launchHorizons, (h) => round(h, 1)),
     },
+    relief: relief.meta,
   };
-  return { index, tiles };
+  return { index, tiles, relief };
 }
 
 /** True when a published index was built from exactly these inputs. */

@@ -20,6 +20,7 @@ on:
       - "forecasts/sites.json"
       - "forecasts/pnpm-lock.yaml"
       - "forecasts/scripts/lib/solar.mjs"
+      - "forecasts/scripts/solar.mjs"
       - ".github/workflows/publish-sites.yml"
   workflow_dispatch:
 

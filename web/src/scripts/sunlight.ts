@@ -1,6 +1,8 @@
 // Sunlight on the terrain: a map of the sunlight (W/m²) reaching the ground
 // around the launch, for the day picked in the page's day tabs, with a time
 // slider and a curve for one point (the launch, or wherever the user taps).
+// A 3D view (sunlight3d.ts, loaded on first use) drapes the same colours over
+// the relief, so the slopes that face the sun stand out.
 //
 // The ground's slope, sky view and horizons come from pre-built terrain tiles
 // (/data/solar/<slug>/); the sun's position and the sky are computed here for
@@ -12,15 +14,19 @@ import { clearSky, withClouds } from "../lib/irradiance.ts";
 import { compassPoint, type Launch } from "../lib/launches.ts";
 import { DATA_BASE } from "../lib/site.ts";
 import { RAMP, fetchTile, pointIrradiance, pointParts, pointTerrain, rampLut, renderTile, type Frame, type PointTerrain, type SolarIndex, type SolarTile } from "../lib/solar-tile.ts";
+import { fetchRelief } from "../lib/relief.ts";
 import { SunCurve } from "../lib/sun-curve.ts";
 import { sunPosition, sunriseSunset, sunVector } from "../lib/sun.ts";
 import { baseMap, markerStyle } from "./map.ts";
+import type { Sunlight3D } from "./sunlight3d.ts";
 
 const STEP_MS = 15 * 60_000;
 /** Top of the colour scale, W/m²; brighter slopes share the darkest colour. */
 const SCALE_MAX = 1000;
 const PLAY_MS = 450;
 const TILE_CACHE = 96;
+/** Relief exaggeration when "Exaggerate relief" is ticked. */
+const EXAGGERATION = 2;
 
 export interface CloudSeries {
   /** Model label, e.g. "HRRR 3 km". */
@@ -82,6 +88,13 @@ export class Sunlight {
   private raf = 0;
   private readonly curve: SunCurve;
   private readonly time: Intl.DateTimeFormat;
+  private view: "2d" | "3d" = "2d";
+  private three: Sunlight3D | null = null;
+  private threeLoading: Promise<void> | null = null;
+  /** The 3D view's draped picture and the tiles it is painted from. */
+  private picture: HTMLCanvasElement | null = null;
+  private pictureTiles: { tile: SolarTile; dx: number; dy: number }[] = [];
+  private readonly tileCanvas = document.createElement("canvas");
 
   constructor(private readonly launch: Launch) {
     this.time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: launch.timeZone });
@@ -96,6 +109,11 @@ export class Sunlight {
       this.cloudsOn = (e.target as HTMLInputElement).checked;
       this.rebuildFrames(false);
     });
+    for (const button of $("sun-view").querySelectorAll<HTMLButtonElement>("button")) {
+      button.addEventListener("click", () => void this.setView(button.dataset.view === "3d" ? "3d" : "2d"));
+    }
+    $<HTMLInputElement>("sun-relief").addEventListener("change", (e) => this.three?.setExaggeration((e.target as HTMLInputElement).checked ? EXAGGERATION : 1));
+    this.tileCanvas.width = this.tileCanvas.height = 256;
 
     // Nothing is downloaded until the section scrolls near the screen.
     const observer = new IntersectionObserver(
@@ -140,6 +158,11 @@ export class Sunlight {
     status.hidden = true;
     $("sun-body").hidden = false;
     this.mountMap(this.index);
+    const threeButton = $("sun-view").querySelector<HTMLButtonElement>('[data-view="3d"]')!;
+    if (!this.index.relief) {
+      threeButton.disabled = true;
+      threeButton.title = "The 3D terrain for this launch is not published yet.";
+    }
     const surface = this.index.sources.surface;
     $("sun-terrain").textContent = `Terrain: ${surface?.name ?? "elevation model"}, ${surface?.resolutionM ?? "?"} m`;
     // The launch's own curve decides the starting time (now, or the day's peak).
@@ -235,11 +258,117 @@ export class Sunlight {
   private redraw() {
     cancelAnimationFrame(this.raf);
     this.raf = requestAnimationFrame(() => {
+      if (this.view === "3d") {
+        this.drawPicture();
+        return;
+      }
       for (const [k, canvas] of this.visible) {
         const tile = this.decoded.get(k);
         if (tile) this.draw(canvas, tile);
       }
     });
+  }
+
+  // ── 3D view ─────────────────────────────────────────────────────────────
+
+  private async setView(view: "2d" | "3d") {
+    if (view === this.view) return;
+    const buttons = $("sun-view").querySelectorAll<HTMLButtonElement>("button");
+    for (const b of buttons) b.setAttribute("aria-pressed", String(b.dataset.view === view));
+    this.view = view;
+    $("sun-map").hidden = view === "3d";
+    $("sun-3d").hidden = view === "2d";
+    $("sun-relief-label").hidden = view === "2d";
+    if (view === "2d") {
+      this.map?.invalidateSize();
+      this.redraw();
+      return;
+    }
+    this.threeLoading ??= this.open3D();
+    await this.threeLoading;
+    this.redraw();
+  }
+
+  private async open3D() {
+    const index = this.index;
+    const status = $("sun-3d-status");
+    if (!index?.relief) return;
+    status.hidden = false;
+    status.textContent = "Loading the 3D terrain…";
+    try {
+      const module = await import("./sunlight3d.ts");
+      if (!module.webglAvailable()) {
+        status.textContent = "This browser cannot draw 3D (WebGL is off or not supported). The 2D map shows the same sunlight.";
+        return;
+      }
+      const meta = index.relief;
+      const [heights] = await Promise.all([fetchRelief(`${DATA_BASE}/solar/${this.launch.slug}/${meta.path}`, meta), this.loadPictureTiles()]);
+      if (!heights || !this.picture) throw new Error("terrain missing");
+      this.three = new module.Sunlight3D({
+        container: $("sun-3d"),
+        meta,
+        heights,
+        picture: this.picture,
+        launch: this.launch,
+        onPick: (lat, lon) => void this.selectPoint(L.latLng(lat, lon), false),
+      });
+      this.three.setExaggeration($<HTMLInputElement>("sun-relief").checked ? EXAGGERATION : 1);
+      if (this.selected && !this.selected.isLaunch) this.three.setSelected({ lat: this.selected.latlng.lat, lon: this.selected.latlng.lng });
+      status.hidden = true;
+    } catch {
+      status.textContent = "The 3D terrain could not be loaded. The 2D map shows the same sunlight.";
+      this.threeLoading = null;
+    }
+  }
+
+  /**
+   * The draped picture is painted from the tiles one zoom finer than the
+   * relief grid, covering exactly the relief's extent.
+   */
+  private async loadPictureTiles() {
+    const index = this.index;
+    const meta = index?.relief;
+    if (!index || !meta) return;
+    const z = Math.min(index.tiles.maxZoom, Math.max(index.tiles.minZoom, meta.zoom + 1));
+    const s = 2 ** (z - meta.zoom);
+    const range = index.tiles.ranges[String(z)];
+    const canvas = document.createElement("canvas");
+    canvas.width = (meta.width - 1) * s;
+    canvas.height = (meta.height - 1) * s;
+    const jobs: Promise<void>[] = [];
+    const tiles: { tile: SolarTile; dx: number; dy: number }[] = [];
+    for (let y = range[1]; y <= range[3]; y += 1) {
+      for (let x = range[0]; x <= range[2]; x += 1) {
+        jobs.push(
+          this.loadTile({ z, x, y }).then((tile) => {
+            if (tile) tiles.push({ tile, dx: x * 256 - meta.x0 * s, dy: y * 256 - meta.y0 * s });
+          }),
+        );
+      }
+    }
+    await Promise.all(jobs);
+    this.pictureTiles = tiles;
+    this.picture = canvas;
+    this.drawPicture();
+  }
+
+  private drawPicture() {
+    const picture = this.picture;
+    const frame = this.frames[this.step];
+    if (!picture || !frame) return;
+    const ctx = picture.getContext("2d")!;
+    const tileCtx = this.tileCanvas.getContext("2d")!;
+    ctx.fillStyle = getComputedStyle($("sun-3d")).getPropertyValue("--surface-2").trim() || "#f0efec";
+    ctx.fillRect(0, 0, picture.width, picture.height);
+    for (const { tile, dx, dy } of this.pictureTiles) {
+      renderTile(tile, frame, this.image.data, this.lut, SCALE_MAX, this.scratch);
+      tileCtx.putImageData(this.image, 0, 0);
+      ctx.drawImage(this.tileCanvas, dx, dy);
+    }
+    this.three?.setSun(frame.azimuthDeg, frame.elevationDeg);
+    this.three?.pictureChanged();
+    $("sun-3d-sun").textContent =
+      frame.elevationDeg > 0 ? `${this.time.format(this.steps[this.step])} · sun ${Math.round(frame.elevationDeg)}° high in the ${compassPoint(frame.azimuthDeg)}` : `${this.time.format(this.steps[this.step])} · sun below the horizon`;
   }
 
   // ── time ────────────────────────────────────────────────────────────────
@@ -373,6 +502,7 @@ export class Sunlight {
       ? null
       : L.circleMarker(latlng, { radius: 7, color: "#ffffff", weight: 2, fillColor: "#0b0b0b", fillOpacity: 1 }).addTo(map);
     $("sun-reset").hidden = isLaunch;
+    this.three?.setSelected(isLaunch ? null : { lat: latlng.lat, lon: latlng.lng });
     const slope = (Math.acos(Math.min(1, terrain.nz / Math.hypot(terrain.nx, terrain.ny, terrain.nz))) * 180) / Math.PI;
     const aspect = ((Math.atan2(terrain.nx, terrain.ny) * 180) / Math.PI + 360) % 360;
     const where = isLaunch ? `${this.launch.name} launch` : `Point ${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}`;

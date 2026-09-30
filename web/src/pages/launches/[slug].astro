@@ -183,7 +183,19 @@ const station = stationEntry && (() => {
     </div>
     <p class="chart-status" id="sun-status">Scroll here to load the sunlight map.</p>
     <div id="sun-body" hidden>
+      <div class="sun-toolbar">
+        <div class="segmented" id="sun-view" role="group" aria-label="View">
+          <button type="button" data-view="2d" aria-pressed="true">2D map</button>
+          <button type="button" data-view="3d" aria-pressed="false">3D terrain</button>
+        </div>
+        <label class="sun-check" id="sun-relief-label" hidden><input type="checkbox" id="sun-relief" /> Exaggerate relief ×2</label>
+      </div>
       <div class="map sun-map" id="sun-map" tabindex="0" aria-label="Map of sunlight on the ground around the launch. Click a spot to see its day."></div>
+      <div class="sun-3d" id="sun-3d" hidden role="img" aria-label="3D view of the terrain around the launch, coloured by the sunlight reaching each slope at the chosen time. The table below lists the same values for the selected spot.">
+        <p class="chart-status sun-3d-status" id="sun-3d-status" hidden></p>
+        <p class="sun-3d-sun" id="sun-3d-sun"></p>
+        <p class="sun-3d-hint">Drag to turn · scroll or pinch to zoom · tap a spot for its day</p>
+      </div>
       <div class="sun-controls">
         <button type="button" class="button secondary" id="sun-play" aria-pressed="false">Play</button>
         <label class="sun-slider">
@@ -227,6 +239,10 @@ const station = stationEntry && (() => {
         <p class="muted">
           A clear sky is dimmed by the cloud cover of the model selected above, at the launch, so a cloud over one ridge but
           not the next does not show. Haze and smoke are not included. Tap or click anywhere on the map to see that spot's day.
+        </p>
+        <p class="muted">
+          The 3D view drapes the same colours over the terrain (heights every ~55 m, true scale unless exaggerated), with the
+          sun shown in its direction for the chosen time: the slopes turned toward it are the ones heating fastest.
         </p>
       </details>
     </div>

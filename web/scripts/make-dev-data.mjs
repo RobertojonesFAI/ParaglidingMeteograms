@@ -422,12 +422,13 @@ for (const site of sites.sites) {
   const fine = gridFromFunction(elevation, { ...expandBounds(bounds, 100), dLon: 1 / 10800, dLat: 1 / 10800 });
   const coarse = gridFromFunction(elevation, { ...expandBounds(bounds, maxDistanceKm * 1000 + 500), dLon: 1 / 3600, dLat: 1 / 3600 });
   const sample = { id: "sample", name: "Synthetic sample terrain (not real)", resolutionM: 10, licence: "–", url: "" };
-  const { index, tiles } = buildSolarTerrain(site, { fine, coarse, radiusKm, maxDistanceKm, sources: { surface: sample, horizon: { ...sample, resolutionM: 30 } } });
+  const { index, tiles, relief } = buildSolarTerrain(site, { fine, coarse, radiusKm, maxDistanceKm, sources: { surface: sample, horizon: { ...sample, resolutionM: 30 } } });
   for (const tile of tiles) {
     const file = join(out, "solar", site.slug, index.tiles.path.replace("{z}", tile.z).replace("{x}", tile.x).replace("{y}", tile.y));
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, tile.body);
   }
+  writeFileSync(join(out, "solar", site.slug, index.relief.path), relief.body);
   write(`solar/${site.slug}/index.json`, index);
 }
 

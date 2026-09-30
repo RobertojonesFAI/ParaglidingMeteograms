@@ -6,6 +6,7 @@
 //   horizons           one (cells + 2·border)² plane per azimuth, in HORIZON_STEP_DEG steps
 
 import { ALBEDO, SHADOW_EDGE_DEG, azimuthWeights, litFraction, onSurface, type Sky } from "./irradiance.ts";
+import type { ReliefMeta } from "./relief.ts";
 
 export interface SolarIndex {
   schemaVersion: 1;
@@ -19,6 +20,8 @@ export interface SolarIndex {
   tiles: { path: string; size: number; minZoom: number; maxZoom: number; ranges: Record<string, [number, number, number, number]>; count: number; bytes: number };
   encoding: { horizonCells: number; horizonBorder: number; azimuthsDeg: number[]; horizonStepDeg: number };
   launch: { elevationM: number | null; slopeDeg: number | null; aspectDeg: number | null; skyViewFactor: number | null; horizonDeg: (number | null)[] };
+  /** The 3D view's ground; absent in indexes published before it existed. */
+  relief?: ReliefMeta;
 }
 
 export interface SolarTile {
