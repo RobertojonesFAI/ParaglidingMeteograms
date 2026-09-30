@@ -130,6 +130,25 @@ const zoneName =
     </div>
   </section>
 
+  <section class="card" aria-labelledby="ecmwf-title">
+    <div class="card-head">
+      <h2 id="ecmwf-title">ECMWF forecast</h2>
+      <span class="card-sub" id="ecmwf-meta"></span>
+    </div>
+    <div id="ecmwf-charts">
+      <p class="chart-status">Loading the ECMWF forecast…</p>
+    </div>
+    <details style="margin-top:14px">
+      <summary>About this forecast</summary>
+      <p class="muted">
+        The European Centre for Medium-Range Weather Forecasts' IFS model, at 9 km, for the grid point nearest the launch.
+        Winds at 850 and 700 hPa come from its 0.25° run. The boundary-layer height is roughly how deep the air near the
+        ground is mixing, a rough ceiling for thermals like the NWS mixing height. ECMWF's open data has no surface heat
+        flux, so it cannot drive the soaring meteogram's thermal strength.
+      </p>
+    </details>
+  </section>
+
   <section class="card" aria-labelledby="text-title">
     <div class="card-head">
       <h2 id="text-title">Forecast discussion</h2>

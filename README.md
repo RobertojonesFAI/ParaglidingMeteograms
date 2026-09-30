@@ -34,6 +34,7 @@ forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ─
 | Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `models.json`, `site-context.json`, and the sunlight-map terrain tiles of new or moved launches |
 | Build forecasts | Every 15 minutes | Builds and publishes the model meteograms (three parallel jobs: NOAA, ECCC Datamart, ECCC mirror) |
 | NWS forecast | Every hour at :20 | Fetches and publishes the NWS forecast for every launch |
+| ECMWF forecast | Every hour at :40 | Fetches and publishes the ECMWF IFS forecast for every launch (from Open-Meteo) |
 
 ## Launches
 
@@ -60,8 +61,10 @@ Models deliberately not used:
 
 - **NAM and SREF**: NOAA retires both on 2026-10-06; RRFS replaces NAM.
 - **RAP**: 13 km with the same physics as HRRR, which already covers the launches at 3 km.
-- **ECMWF IFS and AIFS**: the open data does not include surface heat fluxes, so the engine
-  cannot derive thermal strength from them.
+
+ECMWF IFS is shown in its own panel instead of the meteogram (see below): its open data has no
+surface heat flux, so the engine cannot derive thermal strength from it, and the engine has no
+ECMWF source.
 
 ECCC publishes each run as whole-domain files (4 to 14 GB per run for these models), so the
 two ECCC jobs are the slow part of *Build forecasts*. HRDPS is a Canadian domain; Boise is
@@ -93,6 +96,24 @@ the NWS run and is still built by the models that cover it.
 
 Speeds are published in m/s, heights in metres and temperatures in °C, like the model
 documents; each document's `units` field describes every column.
+
+## ECMWF forecast
+
+ECMWF's real-time forecasts have been open data (CC BY 4.0) since 1 October 2025.
+[`forecasts/scripts/ecmwf.mjs`](forecasts/scripts/ecmwf.mjs) reads them for each launch from
+[Open-Meteo's ECMWF API](https://open-meteo.com/en/docs/ecmwf-api), two requests per launch:
+
+- **IFS HRES, 9 km** (`ecmwf_ifs`): 10 m wind, gusts and direction, boundary-layer height,
+  total/low/mid/high cloud, precipitation, CAPE, temperature, dew point, sunlight. Hourly to
+  90 h, then 3- and 6-hourly (Open-Meteo interpolates to hours).
+- **IFS 0.25°** (`ecmwf_ifs025`): wind and height at 850 and 700 hPa (the 9 km feed has no
+  pressure levels).
+
+The run time comes from Open-Meteo's per-model metadata (`/data/<model>/static/meta.json`).
+Documents use the same units as the NWS ones (m/s, m, °C); `units` in each document lists them.
+Open-Meteo's free API is for **non-commercial use**: if the site ever carries ads or charges,
+get an Open-Meteo API key or read ECMWF's open data directly. ECMWF and Open-Meteo must be
+credited wherever the data is shown (the site footer does).
 
 ## Sunlight map
 
@@ -199,6 +220,8 @@ runs.json                            latest published run of every model
 nws/manifest.json                    what the latest NWS run published, per launch and office
 nws/sites/<slug>.json                one launch's NWS forecast: hourly rows and text periods
 nws/offices/<office>.json            Area Forecast Discussion and Soaring Forecast for an office
+ecmwf/manifest.json                  what the latest ECMWF fetch published, and the model runs
+ecmwf/sites/<slug>.json              one launch's ECMWF IFS hourly forecast
 solar/<slug>/index.json              sunlight-map terrain: tile ranges, encoding, sources, launch summary
 solar/<slug>/<generation>/<z>/<x>/<y>.bin.gz   sunlight-map terrain tiles (immutable; the generation id changes with the inputs)
 ```
@@ -254,7 +277,9 @@ which republishes `models.json` for the new engine version.
 - Forecast documents are derived from NOAA data, including the National Weather Service
   forecast (public domain), and from ECCC data (HRDPS, RDPS, GDPS, GEPS) under the
   [ECCC Data Server End-use Licence](https://eccc-msc.github.io/open-data/licence/readme_en/).
-  The sunlight map's terrain comes from USGS 3DEP (public domain).
+  The sunlight map's terrain comes from USGS 3DEP (public domain). ECMWF forecasts are
+  © ECMWF under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), served by
+  [Open-Meteo](https://open-meteo.com/) (free for non-commercial use).
   Keep the provider attribution wherever the forecasts are shown.
 - These are model forecasts, not observations. They do not replace a pilot's own assessment of
   conditions at launch.

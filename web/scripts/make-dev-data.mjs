@@ -22,6 +22,7 @@ import {
 } from "@azohra/meteo.briefing/contract";
 import { buildManifest, buildSiteDocument, paths as nwsPaths } from "../../forecasts/scripts/lib/nws.mjs";
 import { buildSolarTerrain, domainFor, expandBounds, gridFromFunction, metresPerDegree } from "../../forecasts/scripts/lib/solar.mjs";
+import { ALOFT_FIELDS, SURFACE_FIELDS, buildManifest as buildEcmwfManifest, buildSiteDocument as buildEcmwfDocument, paths as ecmwfPaths } from "../../forecasts/scripts/lib/ecmwf.mjs";
 
 const { values: args } = parseArgs({ options: { out: { type: "string", default: "dev-data" } } });
 const out = resolve(args.out);
@@ -307,6 +308,55 @@ write(nwsPaths.office("BOI"), {
   },
 });
 write(nwsPaths.manifest(), buildManifest({ now, sites: siteEntries, offices: [{ office: "BOI", afdIssuanceTime: new Date(now - 3 * HOUR).toISOString(), srgIssuanceTime: null }] }));
+
+// ECMWF: synthetic Open-Meteo responses run through the real parser. A daily
+// cycle: the boundary layer deepens to ~2 km by late afternoon, an afternoon
+// north-westerly, cumulus building mid-afternoon.
+{
+  const start = Math.floor(now / HOUR) * HOUR - 6 * HOUR;
+  const count = 8 * 24;
+  const localHourOf = (t) => localHour(zone, t);
+  const day = (t) => Math.max(0, Math.sin(((localHourOf(t) - 7) / 12) * Math.PI));
+  const lateDay = (t) => Math.max(0, Math.sin(((localHourOf(t) - 9) / 12) * Math.PI));
+  const values = {
+    temperatureC: (t) => 8 + 14 * day(t),
+    dewPointC: () => 1.5,
+    windSpeedMps: (t) => 1.5 + 4.5 * lateDay(t),
+    windDirectionDeg: (t) => (lateDay(t) > 0.3 ? 318 : 120),
+    windGustMps: (t) => 3 + 7.5 * lateDay(t),
+    cloudCoverPct: (t) => 15 + 45 * lateDay(t) ** 3,
+    cloudLowPct: (t) => 5 + 35 * lateDay(t) ** 3,
+    cloudMidPct: () => 10,
+    cloudHighPct: (t) => 25 + 15 * Math.sin(t / (9 * HOUR)),
+    precipitationMm: () => 0,
+    capeJkg: (t) => 250 * lateDay(t) ** 2,
+    boundaryLayerHeightM: (t) => 150 + 1900 * lateDay(t),
+    shortwaveWm2: (t) => 780 * day(t),
+    wind850SpeedMps: (t) => 5 + 3 * lateDay(t),
+    wind850DirectionDeg: () => 300,
+    height850M: () => 1525,
+    wind700SpeedMps: () => 11,
+    wind700DirectionDeg: () => 255,
+    height700M: () => 3120,
+  };
+  const units = { "°C": "°C", "m/s": "m/s", "°": "°", "%": "%", mm: "mm", "J/kg": "J/kg", m: "m", "W/m²": "W/m²" };
+  const response = (fields) => {
+    const time = Array.from({ length: count }, (_, i) => (start + i * HOUR) / 1000);
+    const hourly = { time };
+    const hourly_units = { time: "unixtime" };
+    for (const [field, [name, accepted]] of Object.entries(fields)) {
+      hourly[name] = time.map((t) => values[field](t * 1000));
+      hourly_units[name] = units[accepted[0]];
+    }
+    return { latitude: 43.62, longitude: -116.02, elevation: 1262, hourly_units, hourly };
+  };
+  const run = new Date(Math.floor((now - 7 * HOUR) / (6 * HOUR)) * 6 * HOUR).toISOString().replace(".000Z", "Z");
+  for (const site of sites.sites) {
+    const doc = buildEcmwfDocument({ site, surface: response(SURFACE_FIELDS), aloft: response(ALOFT_FIELDS), runs: { surface: run, aloft: run }, now });
+    write(ecmwfPaths.site(site.slug), doc);
+  }
+  write(ecmwfPaths.manifest(), buildEcmwfManifest({ now, sites: sites.sites.map((s) => ({ slug: s.slug, ok: true })), runs: { surface: run, aloft: run } }));
+}
 
 // Sunlight map: synthetic foothills around each launch (a small square, so the
 // sample builds in seconds). Ground rises to the south-east, so the launch faces

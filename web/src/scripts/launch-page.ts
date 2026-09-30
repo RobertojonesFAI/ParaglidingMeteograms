@@ -8,6 +8,7 @@ import { localDateKey, localHourOfDay, localInstantMs, runFreshness } from "@azo
 import { buildKeySpec, buildMeteogramScene, renderKeySvg, renderMeteogramSvg } from "@azohra/meteo.briefing/meteogram";
 import { loadForecast } from "@azohra/meteo.briefing/transport";
 import { windWindow, compassPoint, type Launch } from "../lib/launches.ts";
+import { EcmwfChart, type EcmwfSiteDocument } from "../lib/ecmwf-chart.ts";
 import { NwsChart, type NwsHour } from "../lib/nws-chart.ts";
 import { DATA_BASE } from "../lib/site.ts";
 import { fmt, ft, relativeTime } from "../lib/units.ts";
@@ -108,6 +109,8 @@ const manifests = new Map<string, ForecastManifest>();
 const profiles = new Map<string, { profile: SiteForecast; referenceTime: string; generatedAt: string; stale: boolean } | null>();
 let nws: NwsSiteDocument | null = null;
 let chart: NwsChart | null = null;
+let ecmwf: EcmwfSiteDocument | null = null;
+let ecmwfChart: EcmwfChart | null = null;
 const sunlight = new Sunlight(launch);
 
 async function profileFor(slug: string) {
@@ -166,7 +169,8 @@ function renderDayTabs() {
     ...days.map((key, i) => {
       const hasModel = MODEL_ORDER.some((slug) => covers(slug, key));
       const hasNws = nws?.hours.some((h) => inDay(h.validAt, key)) ?? false;
-      return button(dayLabel(key, i), daySub(key), key === day, !hasModel && !hasNws, () => {
+      const hasEcmwf = ecmwf?.hours.some((h) => inDay(h.validAt, key)) ?? false;
+      return button(dayLabel(key, i), daySub(key), key === day, !hasModel && !hasNws && !hasEcmwf, () => {
         day = key;
         render();
       });
@@ -268,13 +272,7 @@ function renderNws() {
   link.href = nws.pageUrl;
   link.hidden = false;
   if (!chart) {
-    chart = new NwsChart($("nws-charts"), {
-      windMinMph: launch.windMinMph,
-      windMaxMph: launch.windMaxMph,
-      gustMaxMph: launch.gustMaxMph,
-      window: arc,
-      windowLabel: `${compassPoint(launch.facingDeg)} ±${launch.windArcHalfWidthDeg}°`,
-    }, tz);
+    chart = new NwsChart($("nws-charts"), chartLaunch(), tz);
   }
   chart.setHours(nws.hours.filter((h) => inDay(h.validAt, day)));
 }
@@ -293,11 +291,34 @@ function cloudsFor(slug: string | null): CloudSeries | null {
   return points.length ? { label: `${modelLabel(slug)}${entry ? ` ${entry.gridKm} km` : ""}`, points } : null;
 }
 
+const chartLaunch = () => ({
+  windMinMph: launch.windMinMph,
+  windMaxMph: launch.windMaxMph,
+  gustMaxMph: launch.gustMaxMph,
+  window: arc,
+  windowLabel: `${compassPoint(launch.facingDeg)} ±${launch.windArcHalfWidthDeg}°`,
+});
+
+function renderEcmwf() {
+  const meta = $("ecmwf-meta");
+  if (!ecmwf) {
+    meta.textContent = "";
+    $("ecmwf-charts").innerHTML = `<p class="chart-status">The ECMWF forecast is not published yet.</p>`;
+    return;
+  }
+  const run = ecmwf.models.surface.run ? `Run ${String(new Date(ecmwf.models.surface.run).getUTCHours()).padStart(2, "0")}Z · ` : "";
+  const grid = ecmwf.site.gridElevationM != null ? ` · grid point at ${fmt(ft(ecmwf.site.gridElevationM))} ft` : "";
+  meta.textContent = `IFS 9 km · ${run}fetched ${relativeTime(ecmwf.generatedAt)}${grid}`;
+  if (!ecmwfChart) ecmwfChart = new EcmwfChart($("ecmwf-charts"), chartLaunch(), tz);
+  ecmwfChart.setHours(ecmwf.hours.filter((h) => inDay(h.validAt, day)));
+}
+
 function render() {
   renderDayTabs();
   renderModelTabs(MODEL_ORDER.filter((slug) => manifests.has(slug)));
   renderMeteogram();
   renderNws();
+  renderEcmwf();
   sunlight.setDay(day, cloudsFor(model));
 }
 
@@ -333,17 +354,19 @@ function renderText(office: NwsOfficeDocument | null) {
 }
 
 async function start() {
-  for (const id of ["meteogram", "nws-charts"]) $(id).classList.add("is-loading");
-  const [modelsJson, contextJson, nwsDoc] = await Promise.all([
+  for (const id of ["meteogram", "nws-charts", "ecmwf-charts"]) $(id).classList.add("is-loading");
+  const [modelsJson, contextJson, nwsDoc, ecmwfDoc] = await Promise.all([
     getJson<unknown>("models.json"),
     getJson<unknown>("site-context.json"),
     getJson<NwsSiteDocument>(`nws/sites/${launch.slug}.json`),
+    getJson<EcmwfSiteDocument>(`ecmwf/sites/${launch.slug}.json`),
     ...MODEL_ORDER.map(loadManifest),
   ]);
   catalogue = modelsJson ? parseModelCatalogueJson(JSON.stringify(modelsJson)) : null;
   const context = contextJson ? parseSiteContextJson(JSON.stringify(contextJson)) : null;
   launchElevationM = context?.sites[launch.slug]?.elevation.elevationM ?? null;
   nws = nwsDoc;
+  ecmwf = ecmwfDoc?.schemaVersion === 1 ? ecmwfDoc : null;
 
   if (launchElevationM != null) {
     $("launch-elevation").textContent = `${fmt(ft(launchElevationM))} ft`;
@@ -355,7 +378,7 @@ async function start() {
   if (model) await profileFor(model);
 
   if (sample) $("sample-notice").hidden = false;
-  for (const id of ["meteogram", "nws-charts"]) $(id).classList.remove("is-loading");
+  for (const id of ["meteogram", "nws-charts", "ecmwf-charts"]) $(id).classList.remove("is-loading");
   render();
 
   const office = nws ? await getJson<NwsOfficeDocument>(`nws/offices/${nws.grid.office}.json`) : null;
