@@ -8,6 +8,9 @@ export default defineConfig({
   // Set to the real domain once it is connected (used for canonical URLs).
   site: "https://example.com",
   trailingSlash: "ignore",
+  // Compression drops the line break between a word and a link that starts the
+  // next source line ("under the<a>…"), gluing them together on the page.
+  compressHTML: false,
   integrations: [devData()],
   vite: {
     // Launch pages are built from ../forecasts/sites.json.

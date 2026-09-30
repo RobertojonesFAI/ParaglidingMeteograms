@@ -130,8 +130,8 @@ export class Sunlight3D {
     stem.position.y = pinHeight / 2;
     const head = new THREE.Mesh(new THREE.SphereGeometry(extent / 160, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(ink) }));
     head.position.y = pinHeight;
-    const name = label(`${launch.name} launch`, ink, surface, extent / 40);
-    name.position.y = pinHeight + extent / 45;
+    const name = label(`${launch.name} launch`, ink, surface, extent / 70);
+    name.position.y = pinHeight + extent / 80;
     this.launchPin.add(stem, head, name);
     this.scene.add(this.launchPin);
 
