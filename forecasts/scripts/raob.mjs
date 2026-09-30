@@ -45,7 +45,8 @@ for (const site of sites) {
 
 let failed = 0;
 for (const { station, sites: stationSites } of byStation.values()) {
-  const soundings = await fetchStationSoundings(station, getJson, { now, warn });
+  const tried = [];
+  const soundings = await fetchStationSoundings(station, getJson, { now, warn, log: (m) => (console.log(m), tried.push(m)) });
   if (soundings.length === 0) {
     failed += 1;
     console.error(`✗ ${station.id}: no sounding found in the last 48 hours`);
@@ -57,7 +58,7 @@ for (const { station, sites: stationSites } of byStation.values()) {
     const first = soundings[0].levels;
     const withDew = first.filter((l) => l.dewPointC !== null).length;
     const withWind = first.filter((l) => l.windSpeedMps !== null).length;
-    console.log(`::notice title=${station.id} balloon::${summary}; dew point on ${withDew}, wind on ${withWind} levels; first levels ${JSON.stringify(first.slice(0, 3))}`);
+    console.log(`::notice title=${station.id} balloon::${summary}; dew point on ${withDew}, wind on ${withWind} levels. Tried: ${tried.join(" | ")}`);
   }
   for (const { site, station: withDistance } of stationSites) {
     const doc = buildSiteDocument({ site, station: withDistance, soundings, now });

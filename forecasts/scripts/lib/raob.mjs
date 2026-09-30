@@ -67,10 +67,14 @@ export const soundingUrl = (stationId, t) => `${API}?ts=${stamp(t)}&station=${st
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+const RD_OVER_G = 287.04 / 9.80665;
+
 /**
  * Normalises one IEM profile into levels, bottom up: pressure (hPa), height
  * (m MSL), temperature and dew point (°C), wind (from °, m/s). Levels without
- * pressure, height or temperature are dropped; repeated pressures keep the first.
+ * pressure or temperature are dropped; repeated pressures keep the first.
+ * Significant levels often arrive without a height: those get one from the
+ * hypsometric equation, integrating from the nearest level below that has one.
  */
 export function normalizeProfile(profile) {
   const seen = new Set();
@@ -79,14 +83,14 @@ export function normalizeProfile(profile) {
     const p = num(level.pres);
     const z = num(level.hght);
     const t = num(level.tmpc);
-    if (p === null || z === null || t === null || p < TOP_HPA || seen.has(p)) continue;
+    if (p === null || t === null || p < TOP_HPA || seen.has(p)) continue;
     seen.add(p);
     const td = num(level.dwpc);
     const kt = num(level.sknt);
     const dir = num(level.drct);
     levels.push({
       pressureHpa: p,
-      heightM: Math.round(z),
+      heightM: z,
       temperatureC: Math.round(t * 10) / 10,
       dewPointC: td === null ? null : Math.round(Math.min(td, t) * 10) / 10,
       windDirectionDeg: kt === null || dir === null ? null : Math.round(dir),
@@ -94,9 +98,22 @@ export function normalizeProfile(profile) {
     });
   }
   levels.sort((a, b) => b.pressureHpa - a.pressureHpa);
+  const firstKnown = levels.findIndex((l) => l.heightM !== null);
+  if (firstKnown < 0) return [];
+  // Levels below the first known height cannot be placed; fill the rest upward.
+  const placed = levels.slice(firstKnown);
+  for (let i = 1; i < placed.length; i += 1) {
+    if (placed[i].heightM !== null) continue;
+    const below = placed[i - 1];
+    const meanK = (below.temperatureC + placed[i].temperatureC) / 2 + 273.15;
+    placed[i].heightM = below.heightM + RD_OVER_G * meanK * Math.log(below.pressureHpa / placed[i].pressureHpa);
+  }
   // Heights must rise with falling pressure; drop anything out of order.
   const clean = [];
-  for (const level of levels) if (clean.length === 0 || level.heightM > clean[clean.length - 1].heightM) clean.push(level);
+  for (const level of placed) {
+    level.heightM = Math.round(level.heightM);
+    if (clean.length === 0 || level.heightM > clean[clean.length - 1].heightM) clean.push(level);
+  }
   return clean;
 }
 
@@ -123,22 +140,27 @@ export function createClient({ fetchImpl = globalThis.fetch, retryDelayMs = 2000
   };
 }
 
-/** The station's latest `keep` soundings (newest first) with at least 10 levels. */
-export async function fetchStationSoundings(station, getJson, { now = Date.now(), keep = 2, warn = () => {} } = {}) {
+/**
+ * The station's latest `keep` soundings (newest first) with at least 10
+ * levels. `log` receives one line per launch time tried (raw and kept levels).
+ */
+export async function fetchStationSoundings(station, getJson, { now = Date.now(), keep = 2, warn = () => {}, log = () => {} } = {}) {
   const soundings = [];
   for (const t of recentLaunchTimes(now, 4)) {
     if (soundings.length >= keep) break;
+    const when = new Date(t).toISOString().replace(".000Z", "Z");
     let body;
     try {
       body = await getJson(soundingUrl(station.id, t));
     } catch (error) {
-      warn(`${station.id} ${new Date(t).toISOString()}: ${error.message}`);
+      warn(`${station.id} ${when}: ${error.message}`);
       continue;
     }
-    const profile = body?.profiles?.[0];
-    const levels = normalizeProfile(profile?.profile);
+    const raw = body?.profiles?.[0]?.profile ?? [];
+    const levels = normalizeProfile(raw);
+    log(`${station.id} ${when}: ${raw.length} raw levels, ${raw.filter((l) => num(l.hght) !== null).length} with heights, ${levels.length} kept`);
     if (levels.length < 10) continue; // not in yet, or a failed flight
-    soundings.push({ validAt: new Date(t).toISOString().replace(".000Z", "Z"), levels });
+    soundings.push({ validAt: when, levels });
   }
   return soundings;
 }

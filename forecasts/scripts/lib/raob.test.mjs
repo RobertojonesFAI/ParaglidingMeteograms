@@ -30,10 +30,23 @@ test("profiles are cleaned: missing values, duplicates, out-of-order heights and
     level(500, 5790, -11.8, -30, 335, 25),
     level(200, 12000, -55, -70, 350, 46), // above the top kept
   ]);
-  assert.deepEqual(levels.map((l) => l.pressureHpa), [912, 900, 850, 500]);
+  // 700 hPa had no height: it gets one between its neighbours instead of being dropped.
+  assert.deepEqual(levels.map((l) => l.pressureHpa), [912, 900, 850, 700, 500]);
+  assert.ok(levels[3].heightM > 1480 && levels[3].heightM < 5790);
   assert.equal(levels[1].windSpeedMps, null);
   assert.equal(levels[2].windSpeedMps, 8.2);
   assert.equal(levels[0].dewPointC, 2.1);
+});
+
+test("significant levels without a height get one from the hypsometric equation", () => {
+  const levels = normalizeProfile([
+    level(913, 874, 23.8, -0.2, 290, 9),
+    level(888, null, 20, -1, null, null),
+    level(850, 1570, 17, -2, 315, 11),
+  ]);
+  assert.equal(levels.length, 3);
+  // 874 m + (Rd/g) * 295 K * ln(913/888) ≈ 874 + 240 m.
+  assert.ok(Math.abs(levels[1].heightM - 1114) < 3, `${levels[1].heightM}`);
 });
 
 test("the fetch keeps the two latest usable soundings", async () => {
