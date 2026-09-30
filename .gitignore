@@ -3,3 +3,4 @@ forecasts/data/
 .DS_Store
 .env
 .env.*
+worker-bundle/

@@ -31,11 +31,18 @@ forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ─
 
 | Workflow | When | What it does |
 | --- | --- | --- |
-| Check | Every pull request and push | Forecasts: validates the launches, unit tests, engine dry run, live NWS fetch without publishing. Web: unit tests, type checks, sample dataset, site build |
+| Check | Every pull request and push | Forecasts: validates the launches, unit tests, engine dry run, live NWS fetch without publishing. Web: unit tests, type checks, sample dataset, site build, Worker bundle |
 | Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `models.json`, `site-context.json`, and the sunlight-map terrain tiles of new or moved launches |
 | Build forecasts | Every 15 minutes | Builds and publishes the model meteograms (three parallel jobs: NOAA, ECCC Datamart, ECCC mirror) |
 | NWS forecast | Every hour at :20 | Fetches and publishes the NWS forecast for every launch, and the latest weather-balloon soundings from each launch's nearest upper-air station |
 | ECMWF forecast | Every hour at :40 | Fetches and publishes the ECMWF IFS forecast for every launch (from Open-Meteo) |
+
+GitHub starts scheduled runs late, sometimes by several hours. The products that come out at a
+set time of day, the NWS Soaring Forecast, the Area Forecast Discussion and the 00/12 UTC
+weather balloons, are therefore also refreshed by the site's Worker on a Cloudflare Cron Trigger
+every 10 minutes ([`web/worker/refresh.ts`](web/worker/refresh.ts)), with the same document
+builders the workflows use. It rewrites a document only when NWS or the balloon archive has
+something new, and records each run in `status/refresh.json`.
 
 ## Launches
 
@@ -124,7 +131,9 @@ Boise launches; any station within 300 km from the list in
 [`forecasts/scripts/lib/raob.mjs`](forecasts/scripts/lib/raob.mjs)) from the
 [Iowa Environmental Mesonet's archive](https://mesonet.agron.iastate.edu/archive/raob/)
 (`/json/raob.py?ts=YYYYmmddHH00&station=KBOI`) and publishes them as `raob/sites/<slug>.json`.
-Levels that arrive without a height get one from the hypsometric equation.
+Levels that arrive without a height get one from the hypsometric equation. Between workflow
+runs, the Worker's 10-minute refresh looks for each new flight from 45 minutes after its launch
+time (once an hour after four hours without it) and puts it in front of the previous one.
 
 The launch page draws them as a Skew-T in the forecast-discussion section, together with the
 NWS Soaring Forecast, which the page parses from its text (`web/src/lib/srg.ts`): the morning
@@ -239,6 +248,7 @@ nws/manifest.json                    what the latest NWS run published, per laun
 nws/sites/<slug>.json                one launch's NWS forecast: hourly rows and text periods
 nws/offices/<office>.json            Area Forecast Discussion and Soaring Forecast for an office
 raob/sites/<slug>.json               the nearest upper-air station's two latest balloon soundings
+status/refresh.json                  what the Worker's last 10-minute refresh found (offices, balloons)
 ecmwf/manifest.json                  what the latest ECMWF fetch published, and the model runs
 ecmwf/sites/<slug>.json              one launch's ECMWF IFS hourly forecast
 solar/<slug>/index.json              sunlight-map terrain: tile ranges, encoding, sources, launch summary

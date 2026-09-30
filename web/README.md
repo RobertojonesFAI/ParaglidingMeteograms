@@ -18,7 +18,17 @@ private and the pages are always as fresh as the dataset.
 browser ──► Worker ──► static pages (dist/)             everything except the two routes below
                ├─────► R2 bucket binding (DATA)           GET /data/<key>
                └─────► GitHub API (one commit per save)   /api/admin/launches, behind Cloudflare Access
+
+Cron Trigger (every 10 min) ──► Worker ──► api.weather.gov, balloon archive ──► R2 bucket binding
 ```
+
+The Worker also has a scheduled handler ([`worker/refresh.ts`](worker/refresh.ts), schedule in
+`triggers.crons` in `wrangler.jsonc`). Every 10 minutes it checks for a new Soaring Forecast or
+Area Forecast Discussion for each forecast office, and for a new 00/12 UTC weather-balloon
+flight, and writes them to the bucket, so they reach the site even when GitHub's scheduled runs
+are late. It reuses the document builders in `forecasts/scripts/lib/`, so the Worker bundle
+includes code from outside `web/` (Workers Builds clones the whole repository). The last run's
+result is at `/data/status/refresh.json`.
 
 ## Launch data
 

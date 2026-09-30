@@ -140,6 +140,24 @@ export function createClient({ fetchImpl = globalThis.fetch, retryDelayMs = 2000
   };
 }
 
+const isoMinute = (t) => new Date(t).toISOString().replace(".000Z", "Z");
+
+/** Fewest levels a flight needs to be used; fewer means not in yet, or a failed flight. */
+export const MIN_LEVELS = 10;
+
+/**
+ * One flight: { validAt, levels } for launch time `t`, or null when the
+ * archive does not have it (yet). `log` receives the raw and kept level counts.
+ */
+export async function fetchSounding(station, getJson, t, { log = () => {} } = {}) {
+  const when = isoMinute(t);
+  const body = await getJson(soundingUrl(station.id, t));
+  const raw = body?.profiles?.[0]?.profile ?? [];
+  const levels = normalizeProfile(raw);
+  log(`${station.id} ${when}: ${raw.length} raw levels, ${raw.filter((l) => num(l.hght) !== null).length} with heights, ${levels.length} kept`);
+  return levels.length < MIN_LEVELS ? null : { validAt: when, levels };
+}
+
 /**
  * The station's latest `keep` soundings (newest first) with at least 10
  * levels. `log` receives one line per launch time tried (raw and kept levels).
@@ -148,21 +166,34 @@ export async function fetchStationSoundings(station, getJson, { now = Date.now()
   const soundings = [];
   for (const t of recentLaunchTimes(now, 4)) {
     if (soundings.length >= keep) break;
-    const when = new Date(t).toISOString().replace(".000Z", "Z");
-    let body;
     try {
-      body = await getJson(soundingUrl(station.id, t));
+      const sounding = await fetchSounding(station, getJson, t, { log });
+      if (sounding) soundings.push(sounding);
     } catch (error) {
-      warn(`${station.id} ${when}: ${error.message}`);
-      continue;
+      warn(`${station.id} ${isoMinute(t)}: ${error.message}`);
     }
-    const raw = body?.profiles?.[0]?.profile ?? [];
-    const levels = normalizeProfile(raw);
-    log(`${station.id} ${when}: ${raw.length} raw levels, ${raw.filter((l) => num(l.hght) !== null).length} with heights, ${levels.length} kept`);
-    if (levels.length < 10) continue; // not in yet, or a failed flight
-    soundings.push({ validAt: when, levels });
   }
   return soundings;
+}
+
+/** Minutes after the nominal time (00/12 UTC) before the archive usually has the flight. */
+export const ARCHIVE_DELAY_MIN = 45;
+
+/**
+ * The launch time (ms) whose flight should be fetched now, or null when the
+ * published document already has the latest flight or it is too early for it.
+ * `newestValidAt` is the newest flight already published (ISO) or null.
+ */
+export function dueLaunchTime(newestValidAt, now) {
+  const [latest] = recentLaunchTimes(now - ARCHIVE_DELAY_MIN * 60_000, 1);
+  const newest = newestValidAt ? Date.parse(newestValidAt) : Number.NEGATIVE_INFINITY;
+  return newest >= latest ? null : latest;
+}
+
+/** `sounding` in front of the previously published ones, newest first, `keep` at most. */
+export function mergeSoundings(sounding, previous = [], keep = 2) {
+  const older = previous.filter((s) => Date.parse(s.validAt) < Date.parse(sounding.validAt));
+  return [sounding, ...older].slice(0, keep);
 }
 
 export function buildSiteDocument({ site, station, soundings, now = Date.now() }) {

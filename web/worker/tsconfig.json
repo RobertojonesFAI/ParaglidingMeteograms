@@ -10,6 +10,9 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
+    // refresh.ts reuses the forecast scripts' plain-JavaScript document builders.
+    "allowJs": true,
+    "checkJs": false,
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   },

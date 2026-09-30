@@ -3,7 +3,8 @@
 #   forecasts: frozen install, sites.json validation, unit tests, an engine dry
 #              run for each model, and a live NWS fetch without publishing
 #   web:       unit tests, type checks, the sample dataset (validated against
-#              the meteo contract) and a production build of the site
+#              the meteo contract), a production build of the site and a
+#              dry-run bundle of the Worker
 name: Check
 
 on:
@@ -94,3 +95,9 @@ jobs:
         run: pnpm run dev-data
       - name: Build
         run: pnpm run build
+      # Bundles the Worker the way the deploy does (it imports the document
+      # builders from forecasts/), without deploying.
+      - name: Worker bundle
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: pnpm exec wrangler deploy --dry-run --outdir ../worker-bundle

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSiteDocument, createClient, fetchStationSoundings, nearestStation, normalizeProfile, recentLaunchTimes, soundingUrl } from "./raob.mjs";
+import { buildSiteDocument, createClient, dueLaunchTime, fetchStationSoundings, mergeSoundings, nearestStation, normalizeProfile, recentLaunchTimes, soundingUrl } from "./raob.mjs";
 
 const CERVIDAE = { slug: "cervidae-peak", name: "Cervidae Peak", latitude: 43.62332, longitude: -115.98076 };
 
@@ -70,4 +70,26 @@ test("the client retries server errors and treats 404 as no data", async () => {
   const getJson = createClient({ retryDelayMs: 1, fetchImpl: async (url) => (url.includes("missing") ? new Response("", { status: 404 }) : ++n < 2 ? new Response("", { status: 503 }) : Response.json({ ok: 1 })) });
   assert.deepEqual(await getJson("https://x/ok"), { ok: 1 });
   assert.equal(await getJson("https://x/missing"), null);
+});
+
+test("a flight is due 45 minutes after its launch time until it is published", () => {
+  const at = (iso) => Date.parse(iso);
+  const iso = (t) => (t === null ? null : new Date(t).toISOString());
+  // 12:30 UTC: too early for the 12 UTC flight; the 00 UTC one is already there.
+  assert.equal(dueLaunchTime("2026-09-30T00:00Z", at("2026-09-30T12:30:00Z")), null);
+  // 12:50 UTC: the 12 UTC flight is due.
+  assert.equal(iso(dueLaunchTime("2026-09-30T00:00Z", at("2026-09-30T12:50:00Z"))), "2026-09-30T12:00:00.000Z");
+  // Once published, nothing is due until the next one.
+  assert.equal(dueLaunchTime("2026-09-30T12:00Z", at("2026-09-30T20:00:00Z")), null);
+  // Nothing published yet: the latest flight is due.
+  assert.equal(iso(dueLaunchTime(null, at("2026-09-30T02:00:00Z"))), "2026-09-30T00:00:00.000Z");
+});
+
+test("a new flight goes in front and the oldest drops off", () => {
+  const s = (validAt) => ({ validAt, levels: [] });
+  const merged = mergeSoundings(s("2026-09-30T12:00Z"), [s("2026-09-30T00:00Z"), s("2026-09-29T12:00Z")]);
+  assert.deepEqual(merged.map((x) => x.validAt), ["2026-09-30T12:00Z", "2026-09-30T00:00Z"]);
+  // A flight already present is not duplicated.
+  const again = mergeSoundings(s("2026-09-30T12:00Z"), merged);
+  assert.deepEqual(again.map((x) => x.validAt), ["2026-09-30T12:00Z", "2026-09-30T00:00Z"]);
 });

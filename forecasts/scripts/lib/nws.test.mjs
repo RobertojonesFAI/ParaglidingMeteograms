@@ -9,6 +9,7 @@ import {
   expandLayer,
   fetchOfficeDocument,
   fetchSiteDocument,
+  officeProductsChanged,
   parseDuration,
   parseValidTime,
 } from "./nws.mjs";
@@ -273,6 +274,39 @@ test("fetchOfficeDocument keeps the AFD and records an office with no Soaring Fo
   assert.equal(doc.products.afd.issuanceTime, "2026-09-29T15:12:00+00:00");
   assert.equal(doc.products.afd.text, "AREA FORECAST DISCUSSION ...");
   assert.equal(doc.products.srg, null);
+});
+
+test("fetchOfficeDocument reuses unchanged products and keeps the last copy when NWS fails", async () => {
+  const previous = {
+    office: "BOI",
+    products: {
+      afd: { id: "afd-1", productCode: "AFD", productName: "Area Forecast Discussion", issuanceTime: "2026-09-29T23:44:00+00:00", text: "OLD AFD" },
+      srg: { id: "srg-1", productCode: "SRG", productName: "Soaring Forecast", issuanceTime: "2026-09-29T13:05:00+00:00", text: "OLD SRG" },
+    },
+  };
+  // A new Soaring Forecast is out; the AFD list still points at the same one.
+  let { getJson, calls } = router({
+    [`${API}/products/types/AFD/locations/BOI`]: { "@graph": [{ id: "afd-1" }] },
+    [`${API}/products/types/SRG/locations/BOI`]: { "@graph": [{ id: "srg-2" }, { id: "srg-1" }] },
+    [`${API}/products/srg-2`]: { id: "srg-2", productCode: "SRG", productName: "Soaring Forecast", issuanceTime: "2026-09-30T13:05:00+00:00", productText: "NEW SRG" },
+  });
+  let doc = await fetchOfficeDocument("BOI", getJson, { now: NOW, warn() {}, previous });
+  assert.equal(doc.products.afd, previous.products.afd);
+  assert.equal(doc.products.srg.text, "NEW SRG");
+  assert.ok(!calls.includes(`${API}/products/afd-1`), "unchanged AFD is not downloaded again");
+  assert.equal(officeProductsChanged(previous, doc), true);
+
+  // NWS answers errors: both products keep their previous copy.
+  const warnings = [];
+  ({ getJson } = router({
+    [`${API}/products/types/AFD/locations/BOI`]: new Error("GET answered 503"),
+    [`${API}/products/types/SRG/locations/BOI`]: new Error("GET answered 503"),
+  }));
+  doc = await fetchOfficeDocument("BOI", getJson, { now: NOW, warn: (m) => warnings.push(m), previous });
+  assert.equal(doc.products.srg.text, "OLD SRG");
+  assert.equal(doc.products.afd.text, "OLD AFD");
+  assert.equal(officeProductsChanged(previous, doc), false);
+  assert.match(warnings.join("\n"), /keeping the previous one/);
 });
 
 function fakeFetch(statuses) {

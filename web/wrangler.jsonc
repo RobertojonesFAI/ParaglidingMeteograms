@@ -12,6 +12,11 @@
     // Everything else is a static file served without invoking the Worker.
     "run_worker_first": ["/data/*", "/api/*"]
   },
+  // Refreshes the Soaring Forecast, forecast discussion and balloon flights
+  // (worker/refresh.ts) independently of GitHub's scheduled runs.
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
   "r2_buckets": [
     {
       "binding": "DATA",

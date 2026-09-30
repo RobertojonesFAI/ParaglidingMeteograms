@@ -68,7 +68,17 @@ for (const site of sites) {
 const officeEntries = [];
 const offices = [...new Set(documents.map((d) => d.grid.office))].sort();
 for (const office of offices) {
-  const document = await fetchOfficeDocument(office, getJson, { now, warn });
+  // The published copy lets a product NWS fails to serve right now stay on the site.
+  let previous = null;
+  if (bucket) {
+    try {
+      const bytes = await bucket.get(paths.office(office));
+      previous = bytes ? JSON.parse(bytes.toString("utf-8")) : null;
+    } catch (error) {
+      warn(`${office}: could not read the published office document (${error.message})`);
+    }
+  }
+  const document = await fetchOfficeDocument(office, getJson, { now, warn, previous });
   write(paths.office(office), document);
   officeEntries.push({
     office,

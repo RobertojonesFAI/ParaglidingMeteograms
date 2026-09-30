@@ -47,7 +47,8 @@ import Base from "../layouts/Base.astro";
         forecast-discussion section draws the latest flights as a Skew-T. The morning flight is read the way the NWS Soaring
         Forecast is made: a thermal leaves the ground at the afternoon forecast high and rises until it is no warmer than the
         morning air, which gives the day's thermal top. The Soaring Forecast's own numbers (trigger temperature, lift, soaring
-        index) are shown alongside, and its model hours can be viewed as Skew-Ts too. Balloon data: NWS, via the
+        index) are shown alongside, and its model hours can be viewed as Skew-Ts too. The site checks for a new Soaring Forecast
+        and a new balloon flight every 10 minutes, so each appears shortly after the NWS releases it. Balloon data: NWS, via the
         <a href="https://mesonet.agron.iastate.edu/archive/raob/">Iowa Environmental Mesonet</a>.
       </p>
     </section>

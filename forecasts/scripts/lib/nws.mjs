@@ -316,11 +316,16 @@ export async function fetchSiteDocument(site, getJson, { now = Date.now(), warn 
   return document;
 }
 
-/** Latest product of a type (AFD, SRG) for an office, or null if the office issues none. */
-export async function fetchLatestProduct(getJson, type, office) {
+/**
+ * Latest product of a type (AFD, SRG) for an office, or null if the office
+ * issues none. When `previous` is already that product it is returned as is,
+ * without downloading the text again.
+ */
+export async function fetchLatestProduct(getJson, type, office, previous = null) {
   const list = await getJson(`${API}/products/types/${type}/locations/${office}`);
   const latest = list?.["@graph"]?.[0];
   if (!latest) return null;
+  if (previous?.id === latest.id && typeof previous.text === "string") return previous;
   const product = await getJson(`${API}/products/${latest.id}`);
   if (product === null) return null;
   return {
@@ -332,15 +337,28 @@ export async function fetchLatestProduct(getJson, type, office) {
   };
 }
 
-export async function fetchOfficeDocument(office, getJson, { now = Date.now(), warn = console.warn } = {}) {
+/**
+ * The office's latest AFD and Soaring Forecast. `previous` is the office
+ * document already published: products that have not changed are reused
+ * without downloading them again, and a product NWS fails to serve keeps its
+ * previous copy instead of disappearing from the site.
+ *
+ * @param {string} office
+ * @param {(url: string) => Promise<any>} getJson
+ * @param {{ now?: number, warn?: (message: string) => void, previous?: any }} [options]
+ * @returns {Promise<{ schemaVersion: number, source: string, generatedAt: string, office: string, products: { afd: any, srg: any } }>}
+ */
+export async function fetchOfficeDocument(office, getJson, { now = Date.now(), warn = console.warn, previous = null } = {}) {
   const products = {};
   // AFD: forecasters' reasoning. SRG: Soaring Forecast, only some offices issue it.
   for (const type of ["AFD", "SRG"]) {
+    const key = type.toLowerCase();
+    const before = previous?.office === office ? (previous.products?.[key] ?? null) : null;
     try {
-      products[type.toLowerCase()] = await fetchLatestProduct(getJson, type, office);
+      products[key] = await fetchLatestProduct(getJson, type, office, before);
     } catch (error) {
-      warn(`${office}: ${type} unavailable (${error.message})`);
-      products[type.toLowerCase()] = null;
+      warn(`${office}: ${type} unavailable (${error.message})${before ? "; keeping the previous one" : ""}`);
+      products[key] = before;
     }
   }
   return {
@@ -350,4 +368,9 @@ export async function fetchOfficeDocument(office, getJson, { now = Date.now(), w
     office,
     products,
   };
+}
+
+/** True when two office documents carry different products (by NWS product id). */
+export function officeProductsChanged(before, after) {
+  return ["afd", "srg"].some((key) => (before?.products?.[key]?.id ?? null) !== (after?.products?.[key]?.id ?? null));
 }

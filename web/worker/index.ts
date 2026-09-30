@@ -6,20 +6,28 @@
 //                            bucket binding (the bucket itself stays private)
 //   /api/admin/launches      list (GET) and create/update (POST) launches;
 //                            requires a valid Cloudflare Access login
+//
+// and, on the schedule in wrangler.jsonc, refreshes the Soaring Forecast, the
+// Area Forecast Discussion and the weather-balloon flights (refresh.ts).
 
 import { AccessError, verifyAccessJwt } from "./access.ts";
 import { GitHubError, listLaunches, saveLaunch } from "./github.ts";
+import { refresh } from "./refresh.ts";
 import { validateLaunchInput } from "../src/lib/launches.ts";
 
 interface R2ObjectLike {
   httpEtag: string;
   writeHttpMetadata(headers: Headers): void;
   body?: ReadableStream;
+  text?(): Promise<string>;
 }
 
 export interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
-  DATA: { get(key: string, options?: { onlyIf?: Headers }): Promise<R2ObjectLike | null> };
+  DATA: {
+    get(key: string, options?: { onlyIf?: Headers }): Promise<R2ObjectLike | null>;
+    put(key: string, value: string, options?: { httpMetadata?: { contentType?: string; cacheControl?: string } }): Promise<unknown>;
+  };
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
   ADMIN_EMAILS?: string;
@@ -105,5 +113,9 @@ export default {
     if (url.pathname === "/api/admin/launches") return admin(request, env);
     if (url.pathname.startsWith("/api/")) return json(404, { error: "not found" });
     return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(controller: { scheduledTime: number }, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<void> {
+    ctx.waitUntil(refresh(env.DATA, { now: controller.scheduledTime }));
   },
 };
