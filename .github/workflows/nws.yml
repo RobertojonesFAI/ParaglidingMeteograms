@@ -6,6 +6,10 @@
 #   nws/offices/<id>.json   Area Forecast Discussion, and the Soaring Forecast
 #                           when the office issues one
 #   nws/manifest.json       what the run published (uploaded last)
+# and the latest weather-balloon soundings from each launch's nearest
+# upper-air station (Boise for the Boise launches), from the Iowa
+# Environmental Mesonet:
+#   raob/sites/<slug>.json  the station's two latest soundings
 #
 # Reads the launches from forecasts/sites.json in this repo. No API key is
 # needed. Skipped until the METEO_R2_BUCKET repository variable is set.
@@ -49,3 +53,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Fetch and publish
         run: scripts/run-annotated.sh "NWS forecast" pnpm run nws --publish
+      # Balloons fly at 00 and 12 UTC; the hourly run picks each one up
+      # within the hour of it reaching the archive.
+      - name: Weather-balloon soundings
+        if: always()
+        run: scripts/run-annotated.sh "balloon soundings" pnpm run raob --publish

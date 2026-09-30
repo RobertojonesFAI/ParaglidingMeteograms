@@ -11,7 +11,8 @@
     "publish:sites": "node scripts/publish-sites.mjs",
     "terrain": "node scripts/terrain.mjs",
     "solar": "node scripts/solar.mjs",
-    "ecmwf": "node scripts/ecmwf.mjs"
+    "ecmwf": "node scripts/ecmwf.mjs",
+    "raob": "node scripts/raob.mjs"
   },
   "engines": {
     "node": ">=22"

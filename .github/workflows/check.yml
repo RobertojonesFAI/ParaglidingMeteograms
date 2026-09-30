@@ -57,6 +57,11 @@ jobs:
       - name: ECMWF live fetch (no publish)
         continue-on-error: true
         run: scripts/run-annotated.sh "ECMWF smoke" pnpm run ecmwf --output ecmwf-smoke --notice
+      # Fetches the latest weather-balloon soundings without publishing; its
+      # notice annotation shows what the archive returned.
+      - name: Balloon soundings live fetch (no publish)
+        continue-on-error: true
+        run: scripts/run-annotated.sh "balloon smoke" pnpm run raob --output raob-smoke --notice
       # Reads the real USGS elevation tiles for a small square around each
       # launch and builds its sunlight tiles, without publishing. Its notice
       # annotation shows the launch's measured slope, facing and horizons.
