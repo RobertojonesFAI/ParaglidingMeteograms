@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "areas": {
+    "king-mountain": {
+      "name": "Lost River Range",
+      "south": 43.58,
+      "west": -114.35,
+      "north": 44.6,
+      "east": -113.05
+    }
+  }
+}
