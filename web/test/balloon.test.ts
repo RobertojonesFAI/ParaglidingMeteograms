@@ -78,7 +78,8 @@ test("a real balloon file comes first and shows clouds from its dew point", () =
 });
 
 test("a flight the archive missed comes from the Soaring Forecast's table, in time order", () => {
-  const evening = [[913, 874, 23.8, -0.2], [850, 1500, 18, -3], [800, 2010, 13.5, -5], [750, 2540, 9, -7], [700, 3100, 4, -9], [600, 4300, -5, -15], [500, 5700, -16, -25]]
+  // Well mixed up to ~1.9 km (cooling faster than a dry thermal), an inversion at 2.3 km.
+  const evening = [[913, 874, 23.8, -0.2], [850, 1500, 17.3, -3], [820, 1800, 14.2, -4], [790, 2300, 15, -12], [750, 2540, 12, -12], [700, 3100, 6, -14], [600, 4300, -4, -18], [500, 5700, -16, -25]]
     .map(([p, z, t, td]) => ({ pressureHpa: p, heightM: z, temperatureC: t, dewPointC: td, windDirectionDeg: 300, windSpeedMps: 5 }));
   const doc: RaobDocument = {
     schemaVersion: 1,
