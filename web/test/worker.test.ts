@@ -99,3 +99,9 @@ test("other paths fall through to the static site; unknown API paths are 404", a
   assert.equal(await (await worker.fetch(request("/launches/cervidae-peak"), env())).text(), "static page");
   assert.equal((await worker.fetch(request("/api/other"), env())).status, 404);
 });
+
+test("routes /api/stations/<id> to the station feed", async () => {
+  const response = await worker.fetch(request("/api/stations/KIDBOISE863"), env());
+  assert.equal(response.status, 503); // no WU_API_KEY in this environment
+  assert.equal((await worker.fetch(request("/api/stations/NOPE1"), env())).status, 404);
+});

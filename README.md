@@ -249,6 +249,7 @@ nws/sites/<slug>.json                one launch's NWS forecast: hourly rows and 
 nws/offices/<office>.json            Area Forecast Discussion and Soaring Forecast for an office
 raob/sites/<slug>.json               the nearest upper-air station's two latest balloon soundings
 status/refresh.json                  what the Worker's last 10-minute refresh found (offices, balloons)
+stations/<id>/latest.json            a launch's weather station: latest report and 5-minute history (written by the Worker)
 ecmwf/manifest.json                  what the latest ECMWF fetch published, and the model runs
 ecmwf/sites/<slug>.json              one launch's ECMWF IFS hourly forecast
 solar/<slug>/index.json              sunlight-map terrain: tile ranges, encoding, sources, launch summary

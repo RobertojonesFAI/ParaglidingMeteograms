@@ -1143,3 +1143,131 @@ fieldset {
   margin-top: 10px;
   font-size: 13px;
 }
+
+/* ── weather station (live at the launch) ────────────────────────────── */
+
+.station {
+  margin-top: 20px;
+}
+
+.station-now {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 16px 28px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .station-now {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.station-wind {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.station-compass {
+  flex: none;
+}
+
+.station-compass.stale {
+  opacity: 0.45;
+}
+
+.compass-ring {
+  fill: var(--surface-2);
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+.compass-window {
+  fill: var(--good-wash);
+  stroke: var(--good);
+  stroke-width: 1;
+  stroke-opacity: 0.6;
+}
+
+.compass-label {
+  font-size: 9px;
+  font-weight: 600;
+  fill: var(--ink-3);
+}
+
+.compass-arrow path {
+  fill: var(--ink-2);
+  stroke: var(--surface);
+  stroke-width: 1.5;
+  paint-order: stroke;
+}
+
+.compass-arrow.in-window path {
+  fill: var(--good);
+}
+
+.compass-calm {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-width: 2;
+}
+
+.station-hero {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 650;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.station-gust {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.station-age {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.station-headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.station-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+
+.station-stats dt {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.station-stats dd {
+  margin: 2px 0 0;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.station-history {
+  margin-top: 16px;
+}
+
+.station-note {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}

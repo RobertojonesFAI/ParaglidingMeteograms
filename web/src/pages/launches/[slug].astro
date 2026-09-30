@@ -2,6 +2,8 @@
 import Base from "../../layouts/Base.astro";
 import { launches } from "../../lib/catalog.ts";
 import { compassPoint, type Launch } from "../../lib/launches.ts";
+import stationsFile from "../../data/stations.json";
+import { dashboardUrl, type StationsFile } from "../../lib/station.ts";
 
 export function getStaticPaths() {
   return launches.map((launch) => ({ params: { slug: launch.slug }, props: { launch } }));
@@ -13,6 +15,19 @@ const zoneName =
   new Intl.DateTimeFormat("en-US", { timeZone: launch.timeZone, timeZoneName: "long" })
     .formatToParts(new Date())
     .find((p) => p.type === "timeZoneName")?.value ?? launch.timeZone;
+
+// The weather station listed for this launch, if any, and where it is from the launch.
+const stationEntry = Object.entries((stationsFile as StationsFile).stations).find(([, s]) => s.launches.includes(launch.slug));
+const station = stationEntry && (() => {
+  const [id, s] = stationEntry;
+  const r = Math.PI / 180;
+  const dy = (s.latitude - launch.latitude) * 111_320;
+  const dx = (s.longitude - launch.longitude) * 111_320 * Math.cos(launch.latitude * r);
+  const distanceM = Math.hypot(dx, dy);
+  const bearing = compassPoint((Math.atan2(dx, dy) / r + 360) % 360);
+  const where = distanceM < 150 ? "at the launch" : `${distanceM < 1000 ? `${Math.round(distanceM / 50) * 50} m` : `${(distanceM / 1000).toFixed(1)} km`} ${bearing} of the launch`;
+  return { id, name: s.name, url: dashboardUrl(id), elevationFt: s.elevationFt, where };
+})();
 ---
 
 <Base title={launch.name} description={`Soaring meteogram and National Weather Service forecast for ${launch.name}.`}>
@@ -31,6 +46,44 @@ const zoneName =
   <p id="sample-notice" class="notice sample" style="margin-top:14px" hidden>
     Sample data for local development. This is not a forecast.
   </p>
+
+  {station && (
+    <section class="card station" id="station" aria-labelledby="station-title">
+      <script type="application/json" id="station-config" set:html={JSON.stringify({ id: station.id, name: station.name, url: station.url })} />
+      <div class="card-head">
+        <h2 id="station-title">Live at the launch</h2>
+        <span class="card-sub">{station.name} station ({station.id}) · {station.where} · {station.elevationFt.toLocaleString("en-US")} ft</span>
+      </div>
+      <p class="chart-status" id="station-status">Loading the station's latest report…</p>
+      <div id="station-body" hidden>
+        <div class="station-now">
+          <div class="station-wind">
+            <svg id="station-compass" class="station-compass" viewBox="0 0 112 112" width="112" height="112" role="img" aria-label="Wind direction: the arrow comes in from where the wind blows from; the green sector is the launch's wind window"></svg>
+            <div>
+              <p class="station-hero" id="station-wind" aria-live="polite"></p>
+              <p class="station-gust" id="station-gust"></p>
+              <p class="muted station-age" id="station-age"></p>
+            </div>
+          </div>
+          <div class="station-verdict">
+            <p class="station-headline" id="station-headline" role="status" aria-live="polite"></p>
+            <ul class="findings" id="station-checks"></ul>
+          </div>
+        </div>
+        <dl class="station-stats" id="station-stats"></dl>
+        <details class="station-history" open>
+          <summary>Last 12 hours</summary>
+          <div id="station-chart"></div>
+        </details>
+      </div>
+      <p class="muted station-note">
+        What the station measured, not a forecast, and it sits {station.where === "at the launch" ? "at" : "near"} the launch, not on it:
+        always check the wind on launch. The limits are this launch's
+        ({launch.windMinMph}–{launch.windMaxMph} mph from {facing} ±{launch.windArcHalfWidthDeg}°, gusts under {launch.gustMaxMph} mph).
+        Refreshes every 2 minutes. Data: <a href={station.url}>Weather Underground</a>.
+      </p>
+    </section>
+  )}
 
   <div class="controls">
     <div>
@@ -238,5 +291,6 @@ const zoneName =
 
   <script>
     import "../../scripts/launch-page.ts";
+    import "../../scripts/station.ts";
   </script>
 </Base>

@@ -35,6 +35,7 @@
   },
   // Secrets (set with `wrangler secret put` or in the dashboard, never in this file):
   //   GITHUB_TOKEN  fine-grained token with Contents read/write on this repository only
+  //   WU_API_KEY    Weather Underground API key for the stations in src/data/stations.json
   "observability": {
     "enabled": true
   }

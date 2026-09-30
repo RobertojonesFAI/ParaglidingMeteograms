@@ -6,6 +6,8 @@
 //                            bucket binding (the bucket itself stays private)
 //   /api/admin/launches      list (GET) and create/update (POST) launches;
 //                            requires a valid Cloudflare Access login
+//   GET /api/stations/<id>   a weather station's latest report and recent
+//                            history (stations.ts; needs the WU_API_KEY secret)
 //
 // and, on the schedule in wrangler.jsonc, refreshes the Soaring Forecast, the
 // Area Forecast Discussion and the weather-balloon flights (refresh.ts).
@@ -13,6 +15,7 @@
 import { AccessError, verifyAccessJwt } from "./access.ts";
 import { GitHubError, listLaunches, saveLaunch } from "./github.ts";
 import { refresh } from "./refresh.ts";
+import { serveStation } from "./stations.ts";
 import { validateLaunchInput } from "../src/lib/launches.ts";
 
 interface R2ObjectLike {
@@ -34,6 +37,7 @@ export interface Env {
   GITHUB_TOKEN?: string;
   GITHUB_REPO?: string;
   GITHUB_BRANCH?: string;
+  WU_API_KEY?: string;
 }
 
 // JSON documents, gzipped history lines, and the sunlight map's binary tiles.
@@ -111,6 +115,8 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/data/")) return serveData(request, env, decodeURIComponent(url.pathname.slice("/data/".length)));
     if (url.pathname === "/api/admin/launches") return admin(request, env);
+    const station = /^\/api\/stations\/([^/]+)$/.exec(url.pathname);
+    if (station) return serveStation(request, env, decodeURIComponent(station[1]));
     if (url.pathname.startsWith("/api/")) return json(404, { error: "not found" });
     return env.ASSETS.fetch(request);
   },

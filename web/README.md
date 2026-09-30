@@ -6,7 +6,7 @@ Cloudflare Worker.
 | Page | What it shows |
 | --- | --- |
 | `/` | Map and list of launches |
-| `/launches/<slug>` | Day and model selectors, the soaring meteogram, the Skew-T sounding for any hour of the day (annotated with the thermal zone, top of lift, cloud base, inversions and cloud layers, with a plain-language reading beside it), the sunlight map (W/m² on the terrain every 15 minutes, with a slider, play button and a daily curve for the launch or a tapped spot), the NWS hourly charts (wind, gusts, transport wind, direction against the launch's wind window, mixing height, clouds and storms), the ECMWF IFS hourly charts (wind, gusts, 850 hPa wind, boundary-layer height, cloud layers), and the NWS text products with a Skew-T of the latest weather balloon (and the Soaring Forecast's model hours), read for pilots |
+| `/launches/<slug>` | The launch's weather station live (wind against the launch's limits, temperature, humidity, pressure, sunshine, and its last 12 hours), day and model selectors, the soaring meteogram, the Skew-T sounding for any hour of the day (annotated with the thermal zone, top of lift, cloud base, inversions and cloud layers, with a plain-language reading beside it), the sunlight map (W/m² on the terrain every 15 minutes, with a slider, play button and a daily curve for the launch or a tapped spot), the NWS hourly charts (wind, gusts, transport wind, direction against the launch's wind window, mixing height, clouds and storms), the ECMWF IFS hourly charts (wind, gusts, 850 hPa wind, boundary-layer height, cloud layers), and the NWS text products with a Skew-T of the latest weather balloon (and the Soaring Forecast's model hours), read for pilots |
 | `/about` | What the charts show, data sources, safety note |
 | `/admin` | Add and edit launches (Cloudflare Access login) |
 
@@ -17,7 +17,8 @@ private and the pages are always as fresh as the dataset.
 ```
 browser ──► Worker ──► static pages (dist/)             everything except the two routes below
                ├─────► R2 bucket binding (DATA)           GET /data/<key>
-               └─────► GitHub API (one commit per save)   /api/admin/launches, behind Cloudflare Access
+               ├─────► GitHub API (one commit per save)   /api/admin/launches, behind Cloudflare Access
+               └─────► Weather Underground API            /api/stations/<id>, copy kept in the bucket
 
 Cron Trigger (every 10 min) ──► Worker ──► api.weather.gov, balloon archive ──► R2 bucket binding
 ```
@@ -120,6 +121,33 @@ Saving a launch makes one commit on `main` that updates both launch files. That 
 
 A slug never changes after a launch is created. Removing a launch is not in the admin page yet;
 delete it from both files by hand.
+
+## Weather stations
+
+A launch can show a nearby personal weather station live, in a "Live at the launch" card at the
+top of its page. Stations are listed in [`src/data/stations.json`](src/data/stations.json) with
+the launches they belong to:
+
+```json
+"KIDBOISE863": { "provider": "wunderground", "name": "Cervidae", "latitude": 43.625,
+                 "longitude": -115.988, "elevationFt": 4000, "launches": ["cervidae-peak"] }
+```
+
+The page reads `GET /api/stations/<id>` every 2 minutes. The Worker
+([`worker/stations.ts`](worker/stations.ts)) answers from its copy in the bucket
+(`stations/<id>/latest.json`) and asks Weather Underground again only when that copy's current
+report is over 2 minutes old or its 5-minute history over 10 minutes old, so the API's daily
+allowance (1,500 calls) holds however many people watch. Only listed stations are served.
+
+The card compares the wind with the launch's own limits (wind window, speed range, gust limit;
+gusts over the last 15 minutes), says when the station has not reported for 20 minutes, and
+charts the last 12 hours: wind and gusts with direction arrows, temperature and dew point, and
+sunshine.
+
+**Setup:** Weather Underground gives an API key to members who send data from a personal
+weather station (*wunderground.com → My Profile → API Keys*). Add it to the Worker as a
+**secret** named `WU_API_KEY` (*Settings → Variables and Secrets → Add → Secret*). Until then the
+card says the station is not connected and links to its Weather Underground page.
 
 ## Units
 

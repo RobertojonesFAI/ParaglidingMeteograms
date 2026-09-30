@@ -23,6 +23,7 @@ import {
 import { buildManifest, buildSiteDocument, paths as nwsPaths } from "../../forecasts/scripts/lib/nws.mjs";
 import { buildSolarTerrain, domainFor, expandBounds, gridFromFunction, metresPerDegree } from "../../forecasts/scripts/lib/solar.mjs";
 import { ALOFT_FIELDS, SURFACE_FIELDS, buildManifest as buildEcmwfManifest, buildSiteDocument as buildEcmwfDocument, paths as ecmwfPaths } from "../../forecasts/scripts/lib/ecmwf.mjs";
+import { SCHEMA_VERSION as STATION_SCHEMA, SOURCE as STATION_SOURCE, dashboardUrl, parseWuCurrent, parseWuHistory } from "../src/lib/station.ts";
 
 const { values: args } = parseArgs({ options: { out: { type: "string", default: "dev-data" } } });
 const out = resolve(args.out);
@@ -428,6 +429,79 @@ for (const site of sites.sites) {
     writeFileSync(file, tile.body);
   }
   write(`solar/${site.slug}/index.json`, index);
+}
+
+// Weather station: 13 hours of synthetic reports in Weather Underground's
+// format (units=m), read by the same parser the Worker uses. Light downslope
+// wind from the south-east overnight, turning up-slope from the north-west
+// late morning and building with gusts; one 20-minute gap in the reports.
+// Served in development at /api/stations/<id> (integrations/dev-data.mjs).
+{
+  const stations = readJson("../src/data/stations.json").stations;
+  for (const [id, station] of Object.entries(stations)) {
+    const site = sites.sites.find((s) => station.launches.includes(s.slug));
+    if (!site) continue;
+    const step = 5 * 60_000;
+    const end = Math.floor(now / step) * step - 60_000;
+    const rows = [];
+    for (let t = end - 13 * HOUR; t <= end; t += step) {
+      const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: site.timeZone, hour: "numeric", hourCycle: "h23" }).format(new Date(t)));
+      const minute = new Date(t).getUTCMinutes();
+      const local = hour + minute / 60;
+      if (t > end - 3 * HOUR && t <= end - 2.6 * HOUR) continue; // the gap
+      const upslope = local >= 11 && local <= 19;
+      const build = upslope ? Math.min(1, (local - 11) / 3) : 0;
+      const kmh = upslope ? 10 + 12 * build + 4 * Math.sin(t / 900_000) : 5 + 2 * Math.sin(t / 1_200_000);
+      const sun = Math.max(0, 820 * Math.sin((Math.PI * (local - 7.2)) / 12)) * (0.85 + 0.15 * Math.cos(t / 1_700_000));
+      const temp = 9 + 11 * Math.max(0, Math.sin((Math.PI * (local - 8)) / 14));
+      rows.push({
+        stationID: id,
+        tz: site.timeZone,
+        obsTimeUtc: new Date(t).toISOString().replace(".000Z", "Z"),
+        epoch: Math.floor(t / 1000),
+        lat: station.latitude,
+        lon: station.longitude,
+        solarRadiationHigh: Math.round(sun * 10) / 10,
+        uvHigh: Math.round(sun / 100),
+        winddirAvg: Math.round(upslope ? 315 + 20 * Math.sin(t / 2_000_000) : 125 + 15 * Math.sin(t / 2_500_000)),
+        humidityAvg: Math.round(55 - temp * 1.2),
+        qcStatus: 1,
+        metric: {
+          tempAvg: Math.round(temp * 10) / 10,
+          dewptAvg: 0.8,
+          windspeedAvg: Math.round(kmh * 10) / 10,
+          windgustHigh: Math.round(kmh * (upslope ? 1.45 : 1.3) * 10) / 10,
+          pressureMax: 1012.4,
+          precipRate: 0,
+          precipTotal: 0,
+        },
+      });
+    }
+    const last = rows.at(-1);
+    const currentBody = {
+      observations: [{
+        stationID: id,
+        obsTimeUtc: new Date(end + 60_000).toISOString().replace(".000Z", "Z"),
+        lat: station.latitude,
+        lon: station.longitude,
+        solarRadiation: last.solarRadiationHigh,
+        uv: last.uvHigh,
+        winddir: last.winddirAvg,
+        humidity: last.humidityAvg,
+        qcStatus: 1,
+        metric: { temp: last.metric.tempAvg, dewpt: 0.8, windSpeed: last.metric.windspeedAvg, windGust: last.metric.windgustHigh, pressure: 1012.2, precipRate: 0, precipTotal: 0 },
+      }],
+    };
+    write(`api/stations/${id}.json`, {
+      schemaVersion: STATION_SCHEMA,
+      source: STATION_SOURCE,
+      station: { id, name: `${station.name} (sample)`, latitude: station.latitude, longitude: station.longitude, elevationM: Math.round(station.elevationFt * 0.3048), url: dashboardUrl(id) },
+      current: parseWuCurrent(currentBody),
+      currentFetchedAt: new Date(now).toISOString(),
+      history: parseWuHistory({ observations: rows }),
+      historyFetchedAt: new Date(now).toISOString(),
+    });
+  }
 }
 
 console.log(`✓ Sample dataset for ${sites.sites.length} launch(es) written to ${out}`);

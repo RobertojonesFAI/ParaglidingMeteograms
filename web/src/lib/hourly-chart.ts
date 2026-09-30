@@ -39,6 +39,8 @@ export interface PanelSpec {
   title: string;
   unit: string;
   height: number;
+  /** Bottom of the axis; 0 unless the quantity has no natural zero (temperature). */
+  yMin?: number;
   yMax: number;
   yStep: number;
   series: Series[];
@@ -58,6 +60,10 @@ export interface TooltipRow {
 export interface ChartSpec<T extends { validAt: string }> {
   /** Shown when the day has no hours. */
   emptyText: string;
+  /** Spacing of the points; 60 (hourly) unless the data is finer, e.g. 5 for station reports. */
+  minutesPerPoint?: number;
+  /** Accessible name of the chart group. */
+  label?: string;
   panels(hours: T[]): PanelSpec[];
   tooltip(hour: T): TooltipRow[];
   note?(hour: T): string | null;
@@ -92,8 +98,22 @@ export class HourlyChart<T extends { validAt: string }> {
     this.render();
   }
 
-  timeLabel(iso: string, withDay = false) {
-    return new Intl.DateTimeFormat("en-US", { timeZone: this.timeZone, hour: "numeric", ...(withDay ? { weekday: "short" } : {}) }).format(new Date(iso));
+  private get minutesPerPoint() {
+    return this.spec.minutesPerPoint ?? 60;
+  }
+
+  timeLabel(iso: string, withDay = false, withMinutes = false) {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: this.timeZone,
+      hour: "numeric",
+      ...(withMinutes ? { minute: "2-digit" } : {}),
+      ...(withDay ? { weekday: "short" } : {}),
+    }).format(new Date(iso));
+  }
+
+  /** Tooltip and table time: minutes too when points are closer than an hour. */
+  private pointLabel(iso: string) {
+    return this.timeLabel(iso, true, this.minutesPerPoint < 60);
   }
 
   private render() {
@@ -114,7 +134,7 @@ export class HourlyChart<T extends { validAt: string }> {
       class: "nws-panels",
       tabindex: "0",
       role: "group",
-      "aria-label": "Hourly forecast charts. Use the left and right arrow keys to step through hours.",
+      "aria-label": this.spec.label ?? "Hourly forecast charts. Use the left and right arrow keys to step through hours.",
     });
     root.appendChild(group);
     for (const panel of this.spec.panels(hours)) this.renderPanel(group, panel, width, right);
@@ -141,8 +161,8 @@ export class HourlyChart<T extends { validAt: string }> {
 
   private nowIndex() {
     const now = Date.now();
-    const index = this.hours.findIndex((h) => Date.parse(h.validAt) + 3_600_000 > now);
-    return index < 0 ? 0 : index;
+    const index = this.hours.findIndex((h) => Date.parse(h.validAt) + this.minutesPerPoint * 60_000 > now);
+    return index < 0 ? this.hours.length - 1 : index;
   }
 
   private x(i: number) {
@@ -173,19 +193,21 @@ export class HourlyChart<T extends { validAt: string }> {
     const plotHeight = spec.height;
     const height = MARGIN.top + plotHeight + arrowRow + MARGIN.bottom;
     const wrap = html("div", { class: "nws-chart" }, undefined, section);
-    const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `${spec.title} by hour` }, wrap);
+    const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `${spec.title} ${this.minutesPerPoint < 60 ? "over time" : "by hour"}` }, wrap);
 
-    const y = (v: number) => MARGIN.top + plotHeight - (v / spec.yMax) * plotHeight;
+    const yMin = spec.yMin ?? 0;
+    const clamp = (v: number) => Math.min(Math.max(v, yMin), spec.yMax);
+    const y = (v: number) => MARGIN.top + plotHeight - ((clamp(v) - yMin) / (spec.yMax - yMin)) * plotHeight;
     const left = MARGIN.left;
     const plotRight = width - right;
 
     if (spec.band) {
-      const top = y(Math.min(spec.band.to, spec.yMax));
+      const top = y(spec.band.to);
       el("rect", { x: left, y: top, width: plotRight - left, height: y(spec.band.from) - top, fill: "var(--good-wash)" }, svg);
     }
 
-    for (let v = 0; v <= spec.yMax; v += spec.yStep) {
-      el("line", { class: v === 0 ? "baseline" : "grid", x1: left, x2: plotRight, y1: y(v), y2: y(v) }, svg);
+    for (let v = yMin; v <= spec.yMax; v += spec.yStep) {
+      el("line", { class: v === yMin ? "baseline" : "grid", x1: left, x2: plotRight, y1: y(v), y2: y(v) }, svg);
       const label = el("text", { class: "tick", x: left - 6, y: y(v) + 4, "text-anchor": "end" }, svg);
       label.textContent = fmt(v);
     }
@@ -194,11 +216,16 @@ export class HourlyChart<T extends { validAt: string }> {
       el("line", { x1: left, x2: plotRight, y1: y(spec.limit), y2: y(spec.limit), stroke: "var(--critical)", "stroke-width": 1.5, "stroke-dasharray": "4 3" }, svg);
     }
 
-    // x ticks every 3 hours (every 6 when narrow)
-    const every = this.geometry.step < 18 ? 6 : 3;
+    // x ticks every 3 hours (every 6 when narrow), at the first point of the hour
+    const pointsPerHour = 60 / this.minutesPerPoint;
+    const every = this.geometry.step * pointsPerHour < 18 ? 6 : 3;
+    const hourOf = new Intl.DateTimeFormat("en-US", { timeZone: this.timeZone, hour: "numeric", hourCycle: "h23" });
+    let previousHour: number | null = null;
     this.hours.forEach((h, i) => {
-      const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: this.timeZone, hour: "numeric", hourCycle: "h23" }).format(new Date(h.validAt)));
-      if (hour % every !== 0) return;
+      const hour = Number(hourOf.format(new Date(h.validAt)));
+      const first = hour !== previousHour;
+      previousHour = hour;
+      if (!first || hour % every !== 0) return;
       const label = el("text", { class: "tick", x: this.x(i), y: height - 6, "text-anchor": "middle" }, svg);
       label.textContent = this.timeLabel(h.validAt);
     });
@@ -206,28 +233,29 @@ export class HourlyChart<T extends { validAt: string }> {
     // series: area wash first, then lines; direct end labels when they do not collide
     const ends: { y: number; label: string }[] = [];
     for (const series of spec.series) {
-      const segments: string[] = [];
-      let current: string[] = [];
+      // Runs of consecutive values; a null breaks the line (and its area) into pieces.
+      const runs: number[][] = [];
+      let run: number[] = [];
       series.values.forEach((v, i) => {
         if (v == null) {
-          if (current.length) segments.push(current.join(" "));
-          current = [];
-          return;
-        }
-        current.push(`${current.length ? "L" : "M"}${this.x(i).toFixed(1)} ${y(Math.min(v, spec.yMax)).toFixed(1)}`);
+          if (run.length) runs.push(run);
+          run = [];
+        } else run.push(i);
       });
-      if (current.length) segments.push(current.join(" "));
-      const d = segments.join(" ");
+      if (run.length) runs.push(run);
+      const pathOf = (indices: number[]) => indices.map((i, k) => `${k ? "L" : "M"}${this.x(i).toFixed(1)} ${y(series.values[i]!).toFixed(1)}`).join(" ");
+      const d = runs.map(pathOf).join(" ");
       if (!d) continue;
       if (series.area) {
-        const first = series.values.findIndex((v) => v != null);
-        const last = series.values.length - 1 - [...series.values].reverse().findIndex((v) => v != null);
-        el("path", { d: `${d} L${this.x(last)} ${y(0)} L${this.x(first)} ${y(0)} Z`, fill: series.color, "fill-opacity": 0.1 }, svg);
+        const area = runs
+          .map((r) => `${pathOf(r)} L${this.x(r[r.length - 1]).toFixed(1)} ${y(yMin).toFixed(1)} L${this.x(r[0]).toFixed(1)} ${y(yMin).toFixed(1)} Z`)
+          .join(" ");
+        el("path", { d: area, fill: series.color, "fill-opacity": 0.1 }, svg);
       }
       el("path", { d, fill: "none", stroke: series.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
       const lastIndex = series.values.length - 1 - [...series.values].reverse().findIndex((v) => v != null);
       const lastValue = series.values[lastIndex];
-      if (lastValue != null && spec.series.length > 1 && right > 40) ends.push({ y: y(Math.min(lastValue, spec.yMax)), label: series.label });
+      if (lastValue != null && spec.series.length > 1 && right > 40) ends.push({ y: y(lastValue), label: series.label });
     }
     ends.sort((a, b) => a.y - b.y);
     let lastY = -Infinity;
@@ -240,7 +268,7 @@ export class HourlyChart<T extends { validAt: string }> {
 
     if (spec.arrows) {
       const rowY = MARGIN.top + plotHeight + ARROW_ROW / 2 + 2;
-      const stride = this.geometry.step < 14 ? 2 : 1;
+      const stride = Math.max(1, Math.ceil(14 / this.geometry.step));
       spec.arrows.forEach((a, i) => {
         if (a.deg == null || i % stride !== 0) return;
         // Points downwind: the direction the air is moving toward.
@@ -289,7 +317,7 @@ export class HourlyChart<T extends { validAt: string }> {
     const h = this.hours[index];
     const tip = this.tooltip;
     tip.replaceChildren();
-    html("div", { class: "tt-time" }, this.timeLabel(h.validAt, true), tip);
+    html("div", { class: "tt-time" }, this.pointLabel(h.validAt), tip);
     for (const row of this.spec.tooltip(h)) {
       const r = html("div", { class: "tt-row" }, undefined, tip);
       const name = html("span", {}, undefined, r);
@@ -326,7 +354,7 @@ export class HourlyChart<T extends { validAt: string }> {
     const body = html("tbody", {}, undefined, table);
     for (const h of this.hours) {
       const tr = html("tr", {}, undefined, body);
-      html("td", {}, this.timeLabel(h.validAt, true), tr);
+      html("td", {}, this.pointLabel(h.validAt), tr);
       spec.cells(h).forEach((cell, i) => html("td", spec.textColumns?.includes(i) ? { class: "text" } : {}, cell, tr));
     }
     if (spec.footnote) html("p", { class: "muted", style: "margin-top:8px;font-size:12px" }, spec.footnote, details);

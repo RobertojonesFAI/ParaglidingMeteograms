@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "stations": {
+    "KIDBOISE863": {
+      "provider": "wunderground",
+      "name": "Cervidae",
+      "latitude": 43.625,
+      "longitude": -115.988,
+      "elevationFt": 4000,
+      "launches": ["cervidae-peak"]
+    }
+  }
+}

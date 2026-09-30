@@ -11,7 +11,7 @@
 // it is no warmer than the morning air. That height is the day's thermal top.
 
 import {
-  feet, findCloudLayers, findStableLayers, freezingLevel, liftParcel, surfacePressureHpa, thermalTop, windAtHeight,
+  feet, findCloudLayers, findStableLayers, freezingLevel, liftParcel, thermalTop, windAtHeight,
   type Finding, type Reading, type Sounding, type SoundingPoint,
 } from "./skewt.ts";
 import type { Srg, SrgProfile } from "./srg.ts";
