@@ -64,6 +64,65 @@ const zoneName =
     </details>
   </section>
 
+  <section class="card" id="skewt-section" aria-labelledby="skewt-title">
+    <div class="card-head">
+      <h2 id="skewt-title">Sounding (Skew-T)</h2>
+      <span class="card-sub" id="skewt-meta"></span>
+    </div>
+    <p class="chart-status" id="skewt-status">Loading the sounding…</p>
+    <div id="skewt-body" hidden>
+      <div class="sun-controls">
+        <label class="sun-slider">
+          <span class="sr-only">Hour of the sounding</span>
+          <input type="range" id="skewt-hour" min="0" max="0" step="1" value="0" />
+        </label>
+        <output id="skewt-hour-label" for="skewt-hour" class="sun-time">–</output>
+        <button type="button" class="button secondary" id="skewt-best">Best thermals</button>
+      </div>
+      <p class="skewt-headline" id="skewt-headline" role="status" aria-live="polite"></p>
+      <div class="skewt-layout">
+        <div class="skewt-figure">
+          <ul class="legend skewt-legend">
+            <li><span class="key-line" style="color:var(--series-2)"></span>Temperature</li>
+            <li><span class="key-line" style="color:var(--series-3)"></span>Dew point</li>
+            <li><span class="key-line key-dash"></span>Rising thermal</li>
+            <li><span class="key-swatch skewt-key-zone"></span>Thermal zone</li>
+            <li><span class="key-swatch skewt-key-buoyant"></span>Thermal warmer than the air</li>
+            <li><span class="key-swatch skewt-key-lid"></span>Inversion (lid)</li>
+            <li><span class="key-swatch skewt-key-cloud"></span>Cloud layer</li>
+          </ul>
+          <div id="skewt-chart"></div>
+        </div>
+        <div class="skewt-reading">
+          <h3>What this sounding says</h3>
+          <ul class="findings" id="skewt-findings"></ul>
+        </div>
+      </div>
+      <details style="margin-top:14px">
+        <summary>How to read a Skew-T</summary>
+        <div class="muted skewt-howto">
+          <p>
+            Height goes up the left side in feet. The <strong>orange line</strong> is the air temperature at each height and the
+            <strong>green line</strong> is the dew point: where the two lines touch, the air is saturated and cloud forms. The faint grid
+            lines leaning to the right are lines of equal temperature. The more the orange line leans left of them, the faster the air
+            cools with height: unstable air, good for thermals. Where it runs parallel to them or leans further right, the air is
+            stable or inverted, and thermals stop.
+          </p>
+          <p>
+            The <strong>dashed line</strong> is a thermal: a bubble of air warmed at the ground, rising and cooling about 3 °C per
+            1000 ft. While it is warmer than the air around it (right of the orange line, shaded) it keeps rising; where it meets the
+            orange line it stops. That is the top of the thermals. If it reaches the dew point before it stops, it makes a cumulus
+            cloud.
+          </p>
+          <p>
+            An <strong>inversion</strong> is a layer where the air gets warmer with height (the orange line bends right). Thermals
+            cannot push through it, so it caps the lift. Wind barbs on the right show the wind at each level, with the speed in mph.
+          </p>
+        </div>
+      </details>
+    </div>
+  </section>
+
   <section class="card" id="sun-section" aria-labelledby="sun-title">
     <div class="card-head">
       <h2 id="sun-title">Sunlight on the terrain</h2>

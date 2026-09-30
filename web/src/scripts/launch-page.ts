@@ -10,6 +10,8 @@ import { loadForecast } from "@azohra/meteo.briefing/transport";
 import { windWindow, compassPoint, type Launch } from "../lib/launches.ts";
 import { EcmwfChart, type EcmwfSiteDocument } from "../lib/ecmwf-chart.ts";
 import { NwsChart, type NwsHour } from "../lib/nws-chart.ts";
+import { SkewTChart } from "../lib/skewt-chart.ts";
+import { buildSounding, readSounding, scalar, type Tone } from "../lib/skewt.ts";
 import { DATA_BASE } from "../lib/site.ts";
 import { fmt, ft, relativeTime } from "../lib/units.ts";
 import { Sunlight, type CloudSeries } from "./sunlight.ts";
@@ -111,6 +113,9 @@ const profiles = new Map<string, { profile: SiteForecast; referenceTime: string;
 let nws: NwsSiteDocument | null = null;
 let chart: NwsChart | null = null;
 let ecmwf: EcmwfSiteDocument | null = null;
+let skewt: SkewTChart | null = null;
+let skewtDay = "";
+let skewtHours: SiteForecast["hours"] = [];
 let ecmwfChart: EcmwfChart | null = null;
 const sunlight = new Sunlight(launch);
 
@@ -314,10 +319,107 @@ function renderEcmwf() {
   ecmwfChart.setHours(ecmwf.hours.filter((h) => inDay(h.validAt, day)));
 }
 
+// ── Skew-T ────────────────────────────────────────────────────────────────
+
+const TONE_ICON: Record<Tone, string> = { good: "✓", neutral: "•", caution: "!", warning: "⚠" };
+const hourFormat = new Intl.DateTimeFormat("en-US", { hour: "numeric", timeZone: tz });
+
+function bestThermalHour(hours: SiteForecast["hours"]) {
+  let best = -1;
+  let bestW = 0;
+  hours.forEach((h, i) => {
+    const w = scalar(h.derived.thermalVelocityMps) ?? 0;
+    if (w > bestW) {
+      best = i;
+      bestW = w;
+    }
+  });
+  if (best >= 0) return best;
+  const afternoon = hours.findIndex((h) => localHourOfDay(h.validAt, tz) >= 14);
+  return afternoon >= 0 ? afternoon : 0;
+}
+
+function showSkewTHour(index: number) {
+  const loaded = model ? profiles.get(model) : null;
+  const hour = skewtHours[index];
+  if (!loaded || !hour) return;
+  const slider = $<HTMLInputElement>("skewt-hour");
+  slider.value = String(index);
+  const label = hourFormat.format(new Date(hour.validAt));
+  $("skewt-hour-label").textContent = label;
+  slider.setAttribute("aria-valuetext", label);
+  const sounding = buildSounding(loaded.profile, hour);
+  if (!skewt) skewt = new SkewTChart($("skewt-chart"), { name: launch.name, elevationM: launchElevationM });
+  skewt.set(sounding);
+  const list = $("skewt-findings");
+  list.replaceChildren();
+  if (!sounding) {
+    $("skewt-headline").textContent = "The model has too few levels this hour to draw a sounding.";
+    return;
+  }
+  const reading = readSounding(sounding, launchElevationM);
+  $("skewt-headline").textContent = reading.headline;
+  for (const f of reading.findings) {
+    const li = document.createElement("li");
+    li.className = `finding finding-${f.tone}`;
+    const icon = document.createElement("span");
+    icon.className = "finding-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = TONE_ICON[f.tone];
+    const body = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = f.title;
+    const p = document.createElement("p");
+    p.textContent = f.text;
+    body.append(title, p);
+    li.append(icon, body);
+    list.appendChild(li);
+  }
+}
+
+function renderSkewT() {
+  const status = $("skewt-status");
+  const body = $("skewt-body");
+  const loaded = model ? profiles.get(model) : null;
+  const entry = model ? modelEntry(model) : null;
+  const hours = loaded ? loaded.profile.hours.filter((h) => inDay(h.validAt, day) && (h.levels?.length ?? 0) >= 2) : [];
+  if (!loaded || hours.length === 0) {
+    body.hidden = true;
+    status.hidden = false;
+    status.textContent = !model
+      ? "Model forecasts for this launch are not published yet."
+      : !loaded
+        ? "Loading the sounding…"
+        : `${modelLabel(model)} has no upper-air levels for this day.`;
+    skewtDay = "";
+    return;
+  }
+  status.hidden = true;
+  body.hidden = false;
+  const run = new Date(loaded.referenceTime);
+  $("skewt-meta").textContent = `${entry ? `${entry.label}, ${entry.gridKm} km` : model} · run ${String(run.getUTCHours()).padStart(2, "0")}Z`;
+  const previous = skewtHours[Number($<HTMLInputElement>("skewt-hour").value)]?.validAt;
+  skewtHours = hours;
+  const slider = $<HTMLInputElement>("skewt-hour");
+  slider.max = String(hours.length - 1);
+  let index = bestThermalHour(hours);
+  if (day === skewtDay && previous) {
+    // Same day (another model, or a refresh): stay on the same hour when it exists.
+    const same = hours.findIndex((h) => h.validAt === previous);
+    if (same >= 0) index = same;
+  }
+  skewtDay = day;
+  showSkewTHour(index);
+}
+
+$<HTMLInputElement>("skewt-hour").addEventListener("input", (e) => showSkewTHour(Number((e.target as HTMLInputElement).value)));
+$("skewt-best").addEventListener("click", () => showSkewTHour(bestThermalHour(skewtHours)));
+
 function render() {
   renderDayTabs();
   renderModelTabs(MODEL_ORDER.filter((slug) => manifests.has(slug)));
   renderMeteogram();
+  renderSkewT();
   renderNws();
   renderEcmwf();
   sunlight.setDay(day, cloudsFor(model));

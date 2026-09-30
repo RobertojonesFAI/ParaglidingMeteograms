@@ -5,8 +5,9 @@ Soaring forecasts for paragliding launches, starting with Cervidae Peak near Boi
 For every launch, the pipeline samples high-resolution weather models and publishes an
 hour-by-hour meteogram: thermal strength (w\*), boundary-layer top, cloud base, usable-lift
 top, and wind at each height. Alongside it, the official National Weather Service point
-forecast for the launch is published every hour, and a sunlight map shows, every 15 minutes
-of the day, how much sun reaches each slope around the launch. New launches are added from the
+forecast for the launch is published every hour, a Skew-T sounding explains each hour in plain
+words, and a sunlight map shows, every 15 minutes of the day, how much sun reaches each slope
+around the launch. New launches are added from the
 site's admin page.
 
 ## How it works
