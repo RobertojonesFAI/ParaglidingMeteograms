@@ -10,7 +10,8 @@
     "nws": "node scripts/nws.mjs",
     "publish:sites": "node scripts/publish-sites.mjs",
     "terrain": "node scripts/terrain.mjs",
-    "solar": "node scripts/solar.mjs"
+    "solar": "node scripts/solar.mjs",
+    "ecmwf": "node scripts/ecmwf.mjs"
   },
   "engines": {
     "node": ">=22"

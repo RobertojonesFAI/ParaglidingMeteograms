@@ -52,6 +52,11 @@ jobs:
       - name: NWS live fetch (no publish)
         continue-on-error: true
         run: pnpm run nws --output nws-smoke
+      # Fetches the live ECMWF forecast from Open-Meteo without publishing; its
+      # notice annotation lists the hours and how many values each field has.
+      - name: ECMWF live fetch (no publish)
+        continue-on-error: true
+        run: scripts/run-annotated.sh "ECMWF smoke" pnpm run ecmwf --output ecmwf-smoke --notice
       # Reads the real USGS elevation tiles for a small square around each
       # launch and builds its sunlight tiles, without publishing. Its notice
       # annotation shows the launch's measured slope, facing and horizons.
