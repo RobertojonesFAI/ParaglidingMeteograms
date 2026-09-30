@@ -5,8 +5,9 @@ Soaring forecasts for paragliding launches, starting with Cervidae Peak near Boi
 For every launch, the pipeline samples high-resolution weather models and publishes an
 hour-by-hour meteogram: thermal strength (w\*), boundary-layer top, cloud base, usable-lift
 top, and wind at each height. Alongside it, the official National Weather Service point
-forecast for the launch is published every hour. New launches are added from the site's admin
-page.
+forecast for the launch is published every hour, and a sunlight map shows, every 15 minutes
+of the day, how much sun reaches each slope around the launch. New launches are added from the
+site's admin page.
 
 ## How it works
 
@@ -30,7 +31,7 @@ forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ─
 | Workflow | When | What it does |
 | --- | --- | --- |
 | Check | Every pull request and push | Forecasts: validates the launches, unit tests, engine dry run, live NWS fetch without publishing. Web: unit tests, type checks, sample dataset, site build |
-| Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `models.json`, `site-context.json` |
+| Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `models.json`, `site-context.json`, and the sunlight-map terrain tiles of new or moved launches |
 | Build forecasts | Every 15 minutes | Builds and publishes the model meteograms (three parallel jobs: NOAA, ECCC Datamart, ECCC mirror) |
 | NWS forecast | Every hour at :20 | Fetches and publishes the NWS forecast for every launch |
 
@@ -92,6 +93,34 @@ the NWS run and is still built by the models that cover it.
 
 Speeds are published in m/s, heights in metres and temperatures in °C, like the model
 documents; each document's `units` field describes every column.
+
+## Sunlight map
+
+Each launch page has a map of the sunlight (W/m²) reaching the ground within 15 km of the
+launch, with a slider from sunrise to sunset in 15-minute steps, a play button, and the day's
+curve for the launch or any spot the user taps.
+
+The ground is prepared once per launch by [`forecasts/scripts/solar.mjs`](forecasts/scripts/solar.mjs)
+(run by *Publish launches*) and cut into map tiles, zoom 11 to 14:
+
+- **surface normal** of every pixel (which way the ground faces, and how steeply), from the
+  [USGS 3DEP](https://www.usgs.gov/3d-elevation-program) 1/3 arc-second elevation model (~10 m);
+- **sky-view factor** of every pixel (how much open sky it sees, for diffuse light);
+- **horizon angles** in 18 directions on a ~28 m grid, traced out to 20 km over the 3DEP
+  1 arc-second model (~30 m) with earth curvature and refraction, so ridges up to 20 km away
+  cast their shadows.
+
+Outside 3DEP's coverage the builder falls back to Copernicus GLO-30 for both. A launch takes
+about 2-3 minutes and ~65 MB of tiles (~450 tiles of 120-250 KB); tiles are only rebuilt when a
+launch is added or moved, or when `ALGORITHM_VERSION` in
+[`forecasts/scripts/lib/solar.mjs`](forecasts/scripts/lib/solar.mjs) changes.
+
+The browser does the rest for each 15-minute step: the sun's position
+([NOAA solar calculator equations](https://gml.noaa.gov/grad/solcalc/calcdetails.html),
+checked in the tests against NREL's Solar Position Algorithm), a clear sky (Meinel direct beam with
+Laue's altitude correction, see [PVEducation](https://www.pveducation.org/pvcdrom/properties-of-sunlight/calculation-of-solar-insolation)),
+and the cloud cover of the model selected on the page (Kasten & Czeplak 1980). Clouds are one
+value for the whole map, taken at the launch. Haze and smoke are not modelled.
 
 ## One-time setup
 
@@ -170,6 +199,8 @@ runs.json                            latest published run of every model
 nws/manifest.json                    what the latest NWS run published, per launch and office
 nws/sites/<slug>.json                one launch's NWS forecast: hourly rows and text periods
 nws/offices/<office>.json            Area Forecast Discussion and Soaring Forecast for an office
+solar/<slug>/index.json              sunlight-map terrain: tile ranges, encoding, sources, launch summary
+solar/<slug>/<generation>/<z>/<x>/<y>.bin.gz   sunlight-map terrain tiles (immutable; the generation id changes with the inputs)
 ```
 
 The model document schemas are described in the
@@ -215,11 +246,15 @@ which republishes `models.json` for the new engine version.
   [`forecasts/scripts/terrain.mjs`](forecasts/scripts/terrain.mjs), which runs the engine's own
   measurement on map tiles joined across tile edges. Engine 0.6.0 stops when a launch is within
   about 10 km of a 1° tile edge, and the 116°W meridian runs through the Boise foothills.
+- Sunlight-map tiles of an earlier generation (a launch that moved, or an algorithm change)
+  stay in the bucket but are no longer referenced; they can be deleted from `solar/<slug>/`
+  by hand.
 - GitHub disables scheduled workflows in a public repository after 60 days without repository
   activity. Re-enable *Build forecasts* and *NWS forecast* from the Actions tab if that happens.
 - Forecast documents are derived from NOAA data, including the National Weather Service
   forecast (public domain), and from ECCC data (HRDPS, RDPS, GDPS, GEPS) under the
   [ECCC Data Server End-use Licence](https://eccc-msc.github.io/open-data/licence/readme_en/).
+  The sunlight map's terrain comes from USGS 3DEP (public domain).
   Keep the provider attribution wherever the forecasts are shown.
 - These are model forecasts, not observations. They do not replace a pilot's own assessment of
   conditions at launch.

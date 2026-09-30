@@ -11,6 +11,7 @@ import { windWindow, compassPoint, type Launch } from "../lib/launches.ts";
 import { NwsChart, type NwsHour } from "../lib/nws-chart.ts";
 import { DATA_BASE } from "../lib/site.ts";
 import { fmt, ft, relativeTime } from "../lib/units.ts";
+import { Sunlight, type CloudSeries } from "./sunlight.ts";
 
 // Short-range high-resolution models first, then regional, global, and the ensemble.
 const MODEL_ORDER = ["hrrr-conus", "hrdps-continental", "rrfs", "rdps", "gfs", "gdps", "geps"];
@@ -107,6 +108,7 @@ const manifests = new Map<string, ForecastManifest>();
 const profiles = new Map<string, { profile: SiteForecast; referenceTime: string; generatedAt: string; stale: boolean } | null>();
 let nws: NwsSiteDocument | null = null;
 let chart: NwsChart | null = null;
+const sunlight = new Sunlight(launch);
 
 async function profileFor(slug: string) {
   if (!profiles.has(slug)) {
@@ -277,11 +279,26 @@ function renderNws() {
   chart.setHours(nws.hours.filter((h) => inDay(h.validAt, day)));
 }
 
+/** The selected model's total cloud cover (ensemble median), for dimming the sunlight map. */
+function cloudsFor(slug: string | null): CloudSeries | null {
+  const loaded = slug ? profiles.get(slug) : null;
+  const entry = slug ? modelEntry(slug) : null;
+  if (!slug || !loaded) return null;
+  const points: CloudSeries["points"] = [];
+  for (const hour of loaded.profile.hours) {
+    const v = hour.surface.cloudCoverPercent;
+    const percent = typeof v === "number" ? v : v.p50;
+    if (percent != null) points.push({ ms: Date.parse(hour.validAt), fraction: percent / 100 });
+  }
+  return points.length ? { label: `${modelLabel(slug)}${entry ? ` ${entry.gridKm} km` : ""}`, points } : null;
+}
+
 function render() {
   renderDayTabs();
   renderModelTabs(MODEL_ORDER.filter((slug) => manifests.has(slug)));
   renderMeteogram();
   renderNws();
+  sunlight.setDay(day, cloudsFor(model));
 }
 
 function renderText(office: NwsOfficeDocument | null) {

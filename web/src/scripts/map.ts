@@ -1,4 +1,5 @@
-// Leaflet maps: the public launch map and the admin location picker.
+// Leaflet maps: the public launch map, the admin location picker, and the base
+// layers under each launch page's sunlight map.
 
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -10,8 +11,8 @@ export interface Marker {
   longitude: number;
 }
 
-function baseMap(element: HTMLElement) {
-  const map = L.map(element, { scrollWheelZoom: false });
+export function baseMap(element: HTMLElement, options: L.MapOptions = {}) {
+  const map = L.map(element, { scrollWheelZoom: false, ...options });
   const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 18,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -27,7 +28,7 @@ function baseMap(element: HTMLElement) {
   return map;
 }
 
-const markerStyle = { radius: 8, color: "#ffffff", weight: 2, fillColor: "#1c5cab", fillOpacity: 1 };
+export const markerStyle = { radius: 8, color: "#ffffff", weight: 2, fillColor: "#1c5cab", fillOpacity: 1 };
 
 export function mountLaunchMap(element: HTMLElement, markers: Marker[]) {
   const map = baseMap(element);

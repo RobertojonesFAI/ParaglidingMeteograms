@@ -70,6 +70,17 @@ test("mosaic fills missing neighbours with nodata and refuses mismatched grids",
   assert.throws(() => mosaic([syntheticTile({ west: -116, south: 43, res: 0.1 }), syntheticTile({ west: -117.03, south: 43, res: 0.1 })]), /aligned/);
 });
 
+test("mosaic joins USGS 3DEP tiles, whose stored pixel size is rounded", async () => {
+  // Real header values of USGS_13_n44w116 / n44w117: 1/3" pixels, 6-pixel overlap, rounded resolution.
+  const res = 9.259259269220167e-5;
+  const overlap = 6 * (1 / 10800);
+  const tile = (west) => syntheticTile({ west: west - overlap, south: 43 - overlap, degrees: 0.02 + 2 * overlap, wide: 1 + 2 * overlap, res });
+  const joined = mosaic([tile(-116), tile(-117)]);
+  assert.equal(joined.width, 10800 + Math.round((1 + 2 * overlap) / res));
+  const window = await joined.readWindow(10790, 10, 20, 1);
+  assert.ok(window.every((v) => Number.isFinite(v) && v !== -32767));
+});
+
 const HALF_M = Math.max(...T.RELIEF_RADII_M) + 200;
 
 test("one tile reproduces the engine's tile-edge failure at Cervidae", async () => {

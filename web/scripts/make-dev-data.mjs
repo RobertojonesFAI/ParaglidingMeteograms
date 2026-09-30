@@ -21,6 +21,7 @@ import {
   siteForecastSchema,
 } from "@azohra/meteo.briefing/contract";
 import { buildManifest, buildSiteDocument, paths as nwsPaths } from "../../forecasts/scripts/lib/nws.mjs";
+import { buildSolarTerrain, domainFor, expandBounds, gridFromFunction, metresPerDegree } from "../../forecasts/scripts/lib/solar.mjs";
 
 const { values: args } = parseArgs({ options: { out: { type: "string", default: "dev-data" } } });
 const out = resolve(args.out);
@@ -306,5 +307,36 @@ write(nwsPaths.office("BOI"), {
   },
 });
 write(nwsPaths.manifest(), buildManifest({ now, sites: siteEntries, offices: [{ office: "BOI", afdIssuanceTime: new Date(now - 3 * HOUR).toISOString(), srgIssuanceTime: null }] }));
+
+// Sunlight map: synthetic foothills around each launch (a small square, so the
+// sample builds in seconds). Ground rises to the south-east, so the launch faces
+// north-west like Cervidae, with gullies and a higher ridge to the east.
+for (const site of sites.sites) {
+  const m = metresPerDegree(site.latitude);
+  const elevation = (lat, lon) => {
+    const e = (lon - site.longitude) * m.lon;
+    const n = (lat - site.latitude) * m.lat;
+    return (
+      1268 +
+      0.16 * (e - n) +
+      70 * Math.sin(e / 430 + n / 650) * Math.cos(n / 520) +
+      18 * Math.sin(e / 120) * Math.cos(n / 150) +
+      380 * Math.exp(-(((e - 2600) / 700) ** 2))
+    );
+  };
+  const radiusKm = 3;
+  const maxDistanceKm = 6;
+  const bounds = domainFor(site.latitude, site.longitude, radiusKm).bounds;
+  const fine = gridFromFunction(elevation, { ...expandBounds(bounds, 100), dLon: 1 / 10800, dLat: 1 / 10800 });
+  const coarse = gridFromFunction(elevation, { ...expandBounds(bounds, maxDistanceKm * 1000 + 500), dLon: 1 / 3600, dLat: 1 / 3600 });
+  const sample = { id: "sample", name: "Synthetic sample terrain (not real)", resolutionM: 10, licence: "–", url: "" };
+  const { index, tiles } = buildSolarTerrain(site, { fine, coarse, radiusKm, maxDistanceKm, sources: { surface: sample, horizon: { ...sample, resolutionM: 30 } } });
+  for (const tile of tiles) {
+    const file = join(out, "solar", site.slug, index.tiles.path.replace("{z}", tile.z).replace("{x}", tile.x).replace("{y}", tile.y));
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, tile.body);
+  }
+  write(`solar/${site.slug}/index.json`, index);
+}
 
 console.log(`✓ Sample dataset for ${sites.sites.length} launch(es) written to ${out}`);

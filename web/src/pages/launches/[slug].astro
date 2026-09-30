@@ -64,6 +64,62 @@ const zoneName =
     </details>
   </section>
 
+  <section class="card" id="sun-section" aria-labelledby="sun-title">
+    <div class="card-head">
+      <h2 id="sun-title">Sunlight on the terrain</h2>
+      <span class="card-sub"><span id="sun-daylight"></span> · <span id="sun-cloud-note"></span></span>
+    </div>
+    <p class="chart-status" id="sun-status">Scroll here to load the sunlight map.</p>
+    <div id="sun-body" hidden>
+      <div class="map sun-map" id="sun-map" tabindex="0" aria-label="Map of sunlight on the ground around the launch. Click a spot to see its day."></div>
+      <div class="sun-controls">
+        <button type="button" class="button secondary" id="sun-play" aria-pressed="false">Play</button>
+        <label class="sun-slider">
+          <span class="sr-only">Time of day</span>
+          <input type="range" id="sun-time" min="0" max="0" step="1" value="0" />
+        </label>
+        <output id="sun-time-label" for="sun-time" class="sun-time">–</output>
+      </div>
+      <div class="sun-options">
+        <div class="sun-legend" aria-label="Colour scale: sunlight in watts per square metre">
+          <div class="sun-legend-bar" id="sun-legend-bar"></div>
+          <div class="sun-legend-ticks" id="sun-legend-ticks"></div>
+          <span class="sun-legend-unit">W/m² reaching the ground</span>
+        </div>
+        <div class="sun-buttons">
+          <button type="button" class="button secondary" id="sun-peak" disabled>Peak</button>
+          <label class="sun-check"><input type="checkbox" id="sun-clouds" checked /> Forecast clouds</label>
+        </div>
+      </div>
+      <div class="sun-point-head">
+        <strong id="sun-point"></strong>
+        <button type="button" class="link-button" id="sun-reset" hidden>Back to the launch</button>
+      </div>
+      <p class="sun-readout" id="sun-readout" role="status" aria-live="polite"></p>
+      <div class="sun-curve" id="sun-curve"></div>
+      <details style="margin-top:10px">
+        <summary>Table</summary>
+        <table class="sun-table">
+          <thead><tr><th scope="col">Time</th><th scope="col">W/m²</th></tr></thead>
+          <tbody id="sun-table"></tbody>
+        </table>
+      </details>
+      <details style="margin-top:10px">
+        <summary>How this is calculated</summary>
+        <p class="muted">
+          Darker orange means more sunlight reaching the ground, and more heating to set off thermals. For every spot the map
+          uses the slope and the direction the ground faces (from a 10 m elevation model), whether a ridge up to 20 km away
+          hides the sun, and how much open sky the spot sees. The sun's position is computed for every 15 minutes from sunrise
+          to sunset. <span id="sun-terrain"></span>.
+        </p>
+        <p class="muted">
+          A clear sky is dimmed by the cloud cover of the model selected above, at the launch, so a cloud over one ridge but
+          not the next does not show. Haze and smoke are not included. Tap or click anywhere on the map to see that spot's day.
+        </p>
+      </details>
+    </div>
+  </section>
+
   <section class="card" aria-labelledby="nws-title">
     <div class="card-head">
       <h2 id="nws-title">National Weather Service forecast</h2>

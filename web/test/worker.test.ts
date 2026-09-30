@@ -44,6 +44,19 @@ test("serves dataset documents from the bucket with their metadata", async () =>
   assert.deepEqual(await response.json(), { ok: true });
 });
 
+test("serves the sunlight map's binary tiles with their long cache", async () => {
+  const bucket = fakeBucket({
+    "solar/cervidae-peak/0a1b2c3d4e5f/14/2915/5975.bin.gz": { body: "tile", contentType: "application/octet-stream", cacheControl: "public, max-age=31536000, immutable" },
+  });
+  const response = await worker.fetch(request("/data/solar/cervidae-peak/0a1b2c3d4e5f/14/2915/5975.bin.gz"), env(bucket));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/octet-stream");
+  assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  assert.equal(await response.text(), "tile");
+  const other = await worker.fetch(request("/data/solar/cervidae-peak/tile.bin"), env(bucket));
+  assert.equal(other.status, 404);
+});
+
 test("answers 304 when the client already has the object", async () => {
   const bucket = fakeBucket({ "runs.json": { body: "{}", contentType: "application/json" } });
   const response = await worker.fetch(request("/data/runs.json", { headers: { "if-none-match": '"9"' } }), env(bucket));

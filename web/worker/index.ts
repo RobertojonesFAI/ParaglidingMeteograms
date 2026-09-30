@@ -28,7 +28,8 @@ export interface Env {
   GITHUB_BRANCH?: string;
 }
 
-const DATA_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*\.(?:json|jsonl\.gz)$/;
+// JSON documents, gzipped history lines, and the sunlight map's binary tiles.
+const DATA_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*\.(?:json|jsonl\.gz|bin\.gz)$/;
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {

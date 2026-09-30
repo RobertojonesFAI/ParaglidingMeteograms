@@ -762,3 +762,209 @@ fieldset {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* ── sunlight map ─────────────────────────────────────────────────────── */
+
+.sun-map {
+  height: 460px;
+}
+
+.sun-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.sun-slider {
+  flex: 1;
+  display: flex;
+}
+
+.sun-slider input {
+  width: 100%;
+  accent-color: var(--accent);
+  min-height: 32px;
+}
+
+.sun-time {
+  min-width: 5.5em;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+#sun-play {
+  min-width: 5.5em;
+  justify-content: center;
+}
+
+.sun-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-top: 12px;
+}
+
+.sun-legend {
+  width: min(320px, 100%);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.sun-legend-bar {
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid var(--ring);
+}
+
+.sun-legend-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sun-legend-unit {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-3);
+}
+
+.sun-buttons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.sun-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sun-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.sun-point-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-top: 20px;
+}
+
+.link-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.sun-readout {
+  margin: 4px 0 6px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.sun-curve svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  touch-action: pan-y;
+}
+
+.sun-curve .gridline {
+  stroke: var(--rule);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.sun-curve .baseline {
+  stroke: var(--axis);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.sun-curve .tick {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sun-curve .direct-label {
+  fill: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.sun-curve .sun-line {
+  fill: none;
+  stroke: var(--series-2);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.sun-curve .sun-peak {
+  fill: var(--series-2);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.sun-curve .sun-now {
+  stroke: var(--ink-2);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.sun-curve .sun-dot {
+  fill: var(--ink);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.sun-curve .crosshair {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.sun-table {
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sun-table th,
+.sun-table td {
+  padding: 3px 14px 3px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sun-table td {
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .sun-map {
+    height: 360px;
+  }
+}

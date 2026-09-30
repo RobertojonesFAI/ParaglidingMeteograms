@@ -52,6 +52,12 @@ jobs:
       - name: NWS live fetch (no publish)
         continue-on-error: true
         run: pnpm run nws --output nws-smoke
+      # Reads the real USGS elevation tiles for a small square around each
+      # launch and builds its sunlight tiles, without publishing. Its notice
+      # annotation shows the launch's measured slope, facing and horizons.
+      - name: Sunlight terrain live read (no publish)
+        continue-on-error: true
+        run: scripts/run-annotated.sh "sunlight terrain smoke" pnpm run solar --output solar-smoke --radius-km 2 --max-distance-km 20
 
   web:
     runs-on: ubuntu-latest

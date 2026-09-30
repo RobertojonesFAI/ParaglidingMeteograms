@@ -53,7 +53,9 @@ export function mosaic(tiles) {
   const placed = tiles.map((tile) => {
     const col = (tile.transform[2] - originX) / a;
     const row = (tile.transform[5] - originY) / e;
-    if (Math.abs(col - Math.round(col)) > 1e-6 || Math.abs(row - Math.round(row)) > 1e-6) {
+    // A thousandth of a pixel: USGS 3DEP tiles sit exactly 1° apart, but their
+    // stored pixel size is rounded, which shows up as ~1e-5 px over 10 800 px.
+    if (Math.abs(col - Math.round(col)) > 1e-3 || Math.abs(row - Math.round(row)) > 1e-3) {
       throw new Error("mosaic: tiles are not aligned to a common pixel grid");
     }
     return { tile, col: Math.round(col), row: Math.round(row) };

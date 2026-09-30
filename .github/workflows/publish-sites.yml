@@ -3,6 +3,9 @@
 #   2. models.json       - the model catalogue of the pinned engine version
 #   3. site-context.json - each launch's measured elevation, terrain and land
 #                          cover, republished when it is stale
+#   4. solar/<slug>/       terrain tiles for each launch's sunlight map (slopes,
+#                          sky view and horizons), rebuilt only for launches that
+#                          are new or moved (~2-3 minutes each)
 #
 # Run this once by hand (Actions tab -> Publish launches -> Run workflow)
 # before the first "Build forecasts" run: builds read sites.json from the bucket.
@@ -16,6 +19,7 @@ on:
     paths:
       - "forecasts/sites.json"
       - "forecasts/pnpm-lock.yaml"
+      - "forecasts/scripts/lib/solar.mjs"
       - ".github/workflows/publish-sites.yml"
   workflow_dispatch:
 
@@ -30,7 +34,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && vars.METEO_R2_BUCKET != ''
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: forecasts
@@ -60,3 +64,5 @@ jobs:
       # across tile edges (engine 0.6.0 cannot read across them).
       - name: Measure terrain (site-context.json)
         run: scripts/run-annotated.sh terrain pnpm run terrain --sync
+      - name: Sunlight terrain tiles (solar/)
+        run: scripts/run-annotated.sh "sunlight terrain" pnpm run solar --sync

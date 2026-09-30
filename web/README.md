@@ -6,7 +6,7 @@ Cloudflare Worker.
 | Page | What it shows |
 | --- | --- |
 | `/` | Map and list of launches |
-| `/launches/<slug>` | Day and model selectors, the soaring meteogram, the NWS hourly charts (wind, gusts, transport wind, direction against the launch's wind window, mixing height, clouds and storms), and the NWS text products |
+| `/launches/<slug>` | Day and model selectors, the soaring meteogram, the sunlight map (W/m² on the terrain every 15 minutes, with a slider, play button and a daily curve for the launch or a tapped spot), the NWS hourly charts (wind, gusts, transport wind, direction against the launch's wind window, mixing height, clouds and storms), and the NWS text products |
 | `/about` | What the charts show, data sources, safety note |
 | `/admin` | Add and edit launches (Cloudflare Access login) |
 

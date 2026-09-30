@@ -9,7 +9,8 @@
     "test": "node --test",
     "nws": "node scripts/nws.mjs",
     "publish:sites": "node scripts/publish-sites.mjs",
-    "terrain": "node scripts/terrain.mjs"
+    "terrain": "node scripts/terrain.mjs",
+    "solar": "node scripts/solar.mjs"
   },
   "engines": {
     "node": ">=22"
