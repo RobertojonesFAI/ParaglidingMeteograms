@@ -76,3 +76,17 @@ test("a real balloon file comes first and shows clouds from its dew point", () =
   assert.match(r.findings.find((f) => f.key === "clouds")!.text, /^(Thermals reach condensation|Blue)/);
   assert.ok(balloonSounding(doc.soundings[0], null)!.points.every((p) => p.pressureHpa >= 450));
 });
+
+test("a flight the archive missed comes from the Soaring Forecast's table, in time order", () => {
+  const evening = [[913, 874, 23.8, -0.2], [850, 1500, 18, -3], [800, 2010, 13.5, -5], [750, 2540, 9, -7], [700, 3100, 4, -9], [600, 4300, -5, -15], [500, 5700, -16, -25]]
+    .map(([p, z, t, td]) => ({ pressureHpa: p, heightM: z, temperatureC: t, dewPointC: td, windDirectionDeg: 300, windSpeedMps: 5 }));
+  const doc: RaobDocument = {
+    schemaVersion: 1,
+    generatedAt: "2026-09-30T05:00:00Z",
+    station: { id: "KBOI", name: "Boise", latitude: 43.57, longitude: -116.21, distanceKm: 20, elevationM: 874 },
+    soundings: [{ validAt: "2026-09-30T00:00:00Z", levels: evening }],
+  };
+  const balloons = choices(doc, SRG, TZ).filter((c) => c.kind === "balloon");
+  assert.deepEqual(balloons.map((c) => [c.validAt, c.hasDewPoint]), [["2026-09-30T00:00:00Z", true], ["2026-09-29T12:00:00Z", false]]);
+  assert.equal(balloons[1].start.source, "forecast-high");
+});

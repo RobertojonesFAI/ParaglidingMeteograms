@@ -159,8 +159,9 @@ export function choices(doc: RaobDocument | null, srg: Srg | null, timeZone: str
     });
   }
   const elevationM = (srg?.stationElevationFt ?? 0) / FT || doc?.station.elevationM || 0;
-  // No balloon file: fall back to the Soaring Forecast's own balloon table.
-  if (out.length === 0 && srg?.observed && elevationM) {
+  // A flight the archive does not have (or no balloon file at all): use the
+  // Soaring Forecast's own copy of it.
+  if (srg?.observed && elevationM && !out.some((c) => c.validAt === srg.observed!.validAt)) {
     const start = high(srg.observed.validAt);
     const sounding = srgSounding(srg.observed, elevationM, start);
     if (sounding) {
@@ -175,6 +176,7 @@ export function choices(doc: RaobDocument | null, srg: Srg | null, timeZone: str
       });
     }
   }
+  out.sort((a, b) => b.validAt.localeCompare(a.validAt));
   for (const m of srg?.model ?? []) {
     if (!elevationM) break;
     const sounding = srgSounding(m, elevationM, null);
