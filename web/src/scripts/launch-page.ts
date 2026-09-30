@@ -11,7 +11,9 @@ import { windWindow, compassPoint, type Launch } from "../lib/launches.ts";
 import { EcmwfChart, type EcmwfSiteDocument } from "../lib/ecmwf-chart.ts";
 import { NwsChart, type NwsHour } from "../lib/nws-chart.ts";
 import { SkewTChart } from "../lib/skewt-chart.ts";
-import { buildSounding, readSounding, scalar, type Tone } from "../lib/skewt.ts";
+import { buildSounding, readSounding, scalar, type Finding, type Tone } from "../lib/skewt.ts";
+import { choices as balloonChoices, readChoice, type Choice, type RaobDocument } from "../lib/balloon.ts";
+import { parseSrg, type Srg } from "../lib/srg.ts";
 import { DATA_BASE } from "../lib/site.ts";
 import { fmt, ft, relativeTime } from "../lib/units.ts";
 import { Sunlight, type CloudSeries } from "./sunlight.ts";
@@ -359,7 +361,12 @@ function showSkewTHour(index: number) {
   }
   const reading = readSounding(sounding, launchElevationM);
   $("skewt-headline").textContent = reading.headline;
-  for (const f of reading.findings) {
+  renderFindings(list, reading.findings);
+}
+
+function renderFindings(list: HTMLElement, findings: Finding[]) {
+  list.replaceChildren();
+  for (const f of findings) {
     const li = document.createElement("li");
     li.className = `finding finding-${f.tone}`;
     const icon = document.createElement("span");
@@ -375,6 +382,74 @@ function showSkewTHour(index: number) {
     li.append(icon, body);
     list.appendChild(li);
   }
+}
+
+// ── Weather balloon ───────────────────────────────────────────────────────
+
+let balloonChart: SkewTChart | null = null;
+
+function legendItem(label: string, swatch: string) {
+  const li = document.createElement("li");
+  li.innerHTML = swatch;
+  li.appendChild(document.createTextNode(label));
+  return li;
+}
+
+function renderBalloon(doc: RaobDocument | null, srgText: string | null) {
+  let srg: Srg | null = null;
+  try {
+    srg = srgText ? parseSrg(srgText) : null;
+  } catch {
+    srg = null;
+  }
+  const list = balloonChoices(doc, srg, tz);
+  const root = $("balloon");
+  if (list.length === 0) {
+    root.hidden = true;
+    return;
+  }
+  root.hidden = false;
+  const station = doc?.station;
+  $("balloon-title").textContent = `Weather balloon sounding · ${station?.name ?? "Boise"}${station ? ` (${station.id})` : ""}`;
+  const day = new Intl.DateTimeFormat("en-US", { weekday: "short", hour: "numeric", timeZone: tz });
+  const hour = new Intl.DateTimeFormat("en-US", { hour: "numeric", timeZone: tz });
+  const tabs = $("balloon-tabs");
+
+  const show = (choice: Choice) => {
+    for (const b of tabs.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.id === choice.id));
+    if (!balloonChart) balloonChart = new SkewTChart($("balloon-chart"), { name: launch.name, elevationM: launchElevationM });
+    balloonChart.set(choice.sounding);
+    const reading = readChoice(choice, srg, launchElevationM, tz);
+    $("balloon-headline").textContent = reading.headline;
+    renderFindings($("balloon-findings"), reading.findings);
+    const legend = $("balloon-legend");
+    legend.replaceChildren(
+      legendItem("Temperature", `<span class="key-line" style="color:var(--series-2)"></span>`),
+      ...(choice.hasDewPoint ? [legendItem("Dew point", `<span class="key-line" style="color:var(--series-3)"></span>`)] : []),
+      legendItem(choice.start.source === "forecast-high" ? "Thermal from the forecast high" : "Rising thermal", `<span class="key-line key-dash"></span>`),
+      legendItem("Thermal zone", `<span class="key-swatch skewt-key-zone"></span>`),
+      legendItem("Inversion (lid)", `<span class="key-swatch skewt-key-lid"></span>`),
+    );
+    const when = new Intl.DateTimeFormat("en-US", { weekday: "long", hour: "numeric", minute: "2-digit", timeZone: tz }).format(new Date(choice.validAt));
+    const elevation = choice.sounding.modelElevationM;
+    $("balloon-meta").textContent =
+      choice.kind === "balloon" ? `Launched ${when}` : `NWS model forecast for ${when}`;
+    $("balloon-note").textContent =
+      choice.kind === "balloon"
+        ? `The balloon goes up from ${station ? `${station.name} airport, ${station.distanceKm} km from ${launch.name},` : "the airport"} at ${fmt(ft(elevation))} ft${
+            choice.hasDewPoint ? "" : ". This is the Soaring Forecast's copy of the flight, without humidity"
+          }. ${choice.start.source === "forecast-high" ? "The dashed line is a thermal leaving the ground at the afternoon forecast high: where it meets the morning temperature line is the day's thermal top. " : ""}Balloon data: NWS, via the Iowa Environmental Mesonet.`
+        : "A model hour from the NWS Soaring Forecast: temperature and wind only, so no clouds are shown.";
+  };
+
+  tabs.replaceChildren(
+    ...list.map((choice) => {
+      const b = button(choice.kind === "balloon" ? day.format(new Date(choice.validAt)) : hour.format(new Date(choice.validAt)), choice.kind === "balloon" ? "balloon" : "NWS model", false, false, () => show(choice));
+      b.dataset.id = choice.id;
+      return b;
+    }),
+  );
+  show(list[0]);
 }
 
 function renderSkewT() {
@@ -458,6 +533,7 @@ function renderText(office: NwsOfficeDocument | null) {
 
 async function start() {
   for (const id of ["meteogram", "nws-charts", "ecmwf-charts"]) $(id).classList.add("is-loading");
+  const raobPromise = getJson<RaobDocument>(`raob/sites/${launch.slug}.json`);
   const [modelsJson, contextJson, nwsDoc, ecmwfDoc] = await Promise.all([
     getJson<unknown>("models.json"),
     getJson<unknown>("site-context.json"),
@@ -486,6 +562,8 @@ async function start() {
 
   const office = nws ? await getJson<NwsOfficeDocument>(`nws/offices/${nws.grid.office}.json`) : null;
   renderText(office);
+  const raob = await raobPromise;
+  renderBalloon(raob?.schemaVersion === 1 ? raob : null, office?.products.srg?.text ?? null);
 }
 
 let resizeTimer = 0;

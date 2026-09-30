@@ -73,6 +73,14 @@ export interface Sounding {
   freezingLevelM: number | null;
   /** Highest published level. */
   topM: number;
+  /** False when the source has no dew point (the line and cloud layers are not drawn). */
+  hasDewPoint: boolean;
+  /** What the chart marks: the shaded thermal zone, the top line and the cloud base. */
+  marks: {
+    zoneTopM: number | null;
+    top: { heightM: number; label: string } | null;
+    cloudBaseM: number | null;
+  };
 }
 
 // ── building ────────────────────────────────────────────────────────────────
@@ -115,43 +123,85 @@ export function buildSounding(profile: Pick<SiteForecast, "site">, hour: Hour): 
   const points = [surface, ...levels];
   const topM = levels[levels.length - 1].heightM;
 
-  // A dense parcel, every 25 m, so its dry leg draws as the curve it is.
-  const dense: { heightM: number; temperatureC: number; dewPointC: number }[] = [];
-  for (let z = zs + 25; z < topM; z += 25) {
-    const env = environmentAtHeight(points, z);
-    dense.push({ heightM: z, temperatureC: env.temperatureC, dewPointC: env.dewPointC });
-  }
-  for (const l of levels) dense.push({ heightM: l.heightM, temperatureC: l.temperatureC, dewPointC: l.dewPointC });
-  dense.sort((a, b) => a.heightM - b.heightM);
-  const ascent = parcelAscent({ temperatureC: ts, dewPointC: surface.dewPointC, elevationM: zs }, dense);
-  const parcel: ParcelSample[] = [
-    { pressureHpa: surface.pressureHpa, heightM: zs, parcelC: ts, environmentC: ts, buoyancyC: 0 },
-    ...ascent.levels.map((sample) => ({
-      pressureHpa: pressureAtHeight(points, sample.heightM),
-      heightM: sample.heightM,
-      parcelC: sample.parcelTempC,
-      environmentC: sample.envTempC,
-      buoyancyC: sample.buoyancyC,
-    })),
-  ];
+  const { parcel, lclM } = liftParcel(points, ts, surface.dewPointC);
 
   const d = hour.derived;
+  const w = scalar(d.thermalVelocityMps) ?? 0;
+  const bl = scalar(d.boundaryLayerTopM);
+  const usable = scalar(d.usableLiftTopM);
+  const base = scalar(d.cloudBaseM);
+  const thermals = w >= 0.1 && bl !== null;
+  const zoneTop = thermals ? (usable ?? bl) : null;
   return {
     validAt: hour.validAt,
     modelElevationM: zs,
     points,
     parcel,
-    lclM: ascent.lclM,
-    boundaryLayerTopM: scalar(d.boundaryLayerTopM),
-    thermalVelocityMps: scalar(d.thermalVelocityMps) ?? 0,
-    cloudBaseM: scalar(d.cloudBaseM),
-    usableLiftTopM: scalar(d.usableLiftTopM),
+    lclM,
+    boundaryLayerTopM: bl,
+    thermalVelocityMps: w,
+    cloudBaseM: base,
+    usableLiftTopM: usable,
     capeJkg: scalar(s.capeJkg),
     inversions: findStableLayers(points),
     cloudLayers: findCloudLayers(points),
     freezingLevelM: freezingLevel(points),
     topM,
+    hasDewPoint: true,
+    marks: {
+      zoneTopM: zoneTop !== null && zoneTop > zs ? zoneTop : null,
+      top: thermals && usable !== null ? { heightM: usable, label: `Top of lift ≈ ${feet(usable).toLocaleString("en-US")} ft` } : null,
+      cloudBaseM: thermals && base !== null && base <= bl! + 100 ? base : null,
+    },
   };
+}
+
+/**
+ * Lifts a thermal from the ground through a column, every 25 m so its dry
+ * leg draws as the curve it is, with the library's parcel physics.
+ */
+export function liftParcel(points: SoundingPoint[], surfaceTempC: number, surfaceDewPointC: number): { parcel: ParcelSample[]; lclM: number | null } {
+  const surface = points[0];
+  const zs = surface.heightM;
+  const topM = points[points.length - 1].heightM;
+  const dewOf = (td: number, t: number) => (Number.isFinite(td) ? td : t - 40);
+  const dense: { heightM: number; temperatureC: number; dewPointC: number }[] = [];
+  for (let z = zs + 25; z < topM; z += 25) {
+    const env = environmentAtHeight(points, z);
+    dense.push({ heightM: z, temperatureC: env.temperatureC, dewPointC: dewOf(env.dewPointC, env.temperatureC) });
+  }
+  for (const l of points.slice(1)) dense.push({ heightM: l.heightM, temperatureC: l.temperatureC, dewPointC: dewOf(l.dewPointC, l.temperatureC) });
+  dense.sort((a, b) => a.heightM - b.heightM);
+  const dew = Math.min(dewOf(surfaceDewPointC, surfaceTempC), surfaceTempC);
+  const ascent = parcelAscent({ temperatureC: surfaceTempC, dewPointC: dew, elevationM: zs }, dense);
+  return {
+    lclM: ascent.lclM,
+    parcel: [
+      { pressureHpa: surface.pressureHpa, heightM: zs, parcelC: surfaceTempC, environmentC: surface.temperatureC, buoyancyC: surfaceTempC - surface.temperatureC },
+      ...ascent.levels.map((sample) => ({
+        pressureHpa: pressureAtHeight(points, sample.heightM),
+        heightM: sample.heightM,
+        parcelC: sample.parcelTempC,
+        environmentC: sample.envTempC,
+        buoyancyC: sample.buoyancyC,
+      })),
+    ],
+  };
+}
+
+/** Where a lifted thermal stops: the first height above the ground where it is no longer warmer than the air. */
+export function thermalTop(parcel: ParcelSample[]): number | null {
+  let rising = false;
+  for (let i = 1; i < parcel.length; i += 1) {
+    const a = parcel[i - 1];
+    const b = parcel[i];
+    if (b.buoyancyC > 0) rising = true;
+    if (rising && b.buoyancyC <= 0) {
+      const f = a.buoyancyC / (a.buoyancyC - b.buoyancyC);
+      return a.heightM + f * (b.heightM - a.heightM);
+    }
+  }
+  return rising ? parcel[parcel.length - 1].heightM : null;
 }
 
 // ── interpolation (linear in log-pressure, as the chart draws) ──────────────
@@ -233,7 +283,7 @@ export function findStableLayers(points: SoundingPoint[]): Layer[] {
 export function findCloudLayers(points: SoundingPoint[]): Layer[] {
   const layers: Layer[] = [];
   points.forEach((p, i) => {
-    if (p.temperatureC - p.dewPointC > 1) return;
+    if (!(p.temperatureC - p.dewPointC <= 1)) return;
     const below = i > 0 ? (points[i - 1].heightM + p.heightM) / 2 : p.heightM;
     const above = i < points.length - 1 ? (points[i + 1].heightM + p.heightM) / 2 : p.heightM;
     const prev = layers[layers.length - 1];

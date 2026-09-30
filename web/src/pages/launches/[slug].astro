@@ -214,6 +214,25 @@ const zoneName =
       <span class="card-sub">National Weather Service text products</span>
     </div>
     <ul class="periods" id="nws-periods"></ul>
+    <div class="balloon" id="balloon" hidden>
+      <div class="card-head">
+        <h3 id="balloon-title">Weather balloon sounding</h3>
+        <span class="card-sub" id="balloon-meta"></span>
+      </div>
+      <div class="segmented" id="balloon-tabs" role="group" aria-labelledby="balloon-title"></div>
+      <p class="skewt-headline" id="balloon-headline" role="status" aria-live="polite"></p>
+      <div class="skewt-layout">
+        <div class="skewt-figure">
+          <ul class="legend skewt-legend" id="balloon-legend"></ul>
+          <div id="balloon-chart"></div>
+        </div>
+        <div class="skewt-reading">
+          <h3>What this sounding says</h3>
+          <ul class="findings" id="balloon-findings"></ul>
+        </div>
+      </div>
+      <p class="muted balloon-note" id="balloon-note"></p>
+    </div>
     <div class="stack" id="nws-products" style="margin-top:18px"></div>
   </section>
 

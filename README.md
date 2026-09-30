@@ -34,7 +34,7 @@ forecasts/sites.json ──► GitHub Actions ──► Cloudflare R2 bucket ─
 | Check | Every pull request and push | Forecasts: validates the launches, unit tests, engine dry run, live NWS fetch without publishing. Web: unit tests, type checks, sample dataset, site build |
 | Publish launches | `sites.json` or the engine changes | Publishes `sites.json`, `models.json`, `site-context.json`, and the sunlight-map terrain tiles of new or moved launches |
 | Build forecasts | Every 15 minutes | Builds and publishes the model meteograms (three parallel jobs: NOAA, ECCC Datamart, ECCC mirror) |
-| NWS forecast | Every hour at :20 | Fetches and publishes the NWS forecast for every launch |
+| NWS forecast | Every hour at :20 | Fetches and publishes the NWS forecast for every launch, and the latest weather-balloon soundings from each launch's nearest upper-air station |
 | ECMWF forecast | Every hour at :40 | Fetches and publishes the ECMWF IFS forecast for every launch (from Open-Meteo) |
 
 ## Launches
@@ -115,6 +115,23 @@ Documents use the same units as the NWS ones (m/s, m, °C); `units` in each docu
 Open-Meteo's free API is for **non-commercial use**: if the site ever carries ads or charges,
 get an Open-Meteo API key or read ECMWF's open data directly. ECMWF and Open-Meteo must be
 credited wherever the data is shown (the site footer does).
+
+## Weather-balloon soundings
+
+NWS weather balloons (radiosondes) go up at 00 and 12 UTC. [`forecasts/scripts/raob.mjs`](forecasts/scripts/raob.mjs)
+reads the two latest flights of each launch's nearest upper-air station (Boise, KBOI, for the
+Boise launches; any station within 300 km from the list in
+[`forecasts/scripts/lib/raob.mjs`](forecasts/scripts/lib/raob.mjs)) from the
+[Iowa Environmental Mesonet's archive](https://mesonet.agron.iastate.edu/archive/raob/)
+(`/json/raob.py?ts=YYYYmmddHH00&station=KBOI`) and publishes them as `raob/sites/<slug>.json`.
+Levels that arrive without a height get one from the hypsometric equation.
+
+The launch page draws them as a Skew-T in the forecast-discussion section, together with the
+NWS Soaring Forecast, which the page parses from its text (`web/src/lib/srg.ts`): the morning
+flight is read the way the Soaring Forecast is made, a thermal leaving the ground at the forecast
+high and rising until it meets the morning temperature line; the Soaring Forecast's model hours
+(9 AM to 6 PM, temperature and wind only) are offered too. Without a balloon file, the Soaring
+Forecast's own balloon table is used.
 
 ## Sunlight map
 
@@ -221,6 +238,7 @@ runs.json                            latest published run of every model
 nws/manifest.json                    what the latest NWS run published, per launch and office
 nws/sites/<slug>.json                one launch's NWS forecast: hourly rows and text periods
 nws/offices/<office>.json            Area Forecast Discussion and Soaring Forecast for an office
+raob/sites/<slug>.json               the nearest upper-air station's two latest balloon soundings
 ecmwf/manifest.json                  what the latest ECMWF fetch published, and the model runs
 ecmwf/sites/<slug>.json              one launch's ECMWF IFS hourly forecast
 solar/<slug>/index.json              sunlight-map terrain: tile ranges, encoding, sources, launch summary

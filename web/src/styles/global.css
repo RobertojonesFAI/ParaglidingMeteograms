@@ -1121,3 +1121,25 @@ fieldset {
   margin: 8px 0 0;
   line-height: 1.5;
 }
+
+/* ── weather balloon (inside the forecast discussion) ─────────────────── */
+
+.balloon {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.balloon h3#balloon-title {
+  margin: 0;
+  font-size: 17px;
+}
+
+.balloon .segmented {
+  margin-top: 10px;
+}
+
+.balloon-note {
+  margin-top: 10px;
+  font-size: 13px;
+}

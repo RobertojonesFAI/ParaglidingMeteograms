@@ -304,9 +304,50 @@ write(nwsPaths.office("BOI"), {
       issuanceTime: new Date(now - 3 * HOUR).toISOString(),
       text: "SAMPLE AREA FORECAST DISCUSSION\nThis is sample text for local development. It is not a forecast.\n\n.SHORT TERM...\nHigh pressure keeps skies mostly clear. Afternoon northwest winds 10 to 15 mph over the ridges.\n",
     },
-    srg: null,
+    // A real Boise Soaring Forecast (29 September 2026), kept as a test fixture.
+    srg: {
+      id: "sample",
+      productCode: "SRG",
+      productName: "Soaring Forecast",
+      issuanceTime: "2026-09-29T13:05:00Z",
+      text: readFileSync(new URL("../test/fixtures/srg-boi.txt", import.meta.url), "utf-8"),
+    },
   },
 });
+
+// Weather balloon: the Soaring Forecast's morning table as a balloon file, with
+// a synthetic dew point (the table has none), plus an evening flight.
+{
+  const srgText = readFileSync(new URL("../test/fixtures/srg-boi.txt", import.meta.url), "utf-8");
+  const lines = srgText.split("\n");
+  const rows = lines
+    .slice(lines.findIndex((l) => l.includes("Upper air data")), lines.findIndex((l) => l.includes("Numerical weather prediction")))
+    .map((l) => l.trim().split(/\s+/))
+    .filter((t) => t.length >= 13 && /^\d+$/.test(t[0]) && t[1] !== "M")
+    .map((t) => ({ z: Number(t[0]) / 3.28084, t: Number(t[1]), dir: Number(t[3]), kt: Number(t[4]) }))
+    .sort((a, b) => a.z - b.z);
+  const flight = (validAt, warm) => {
+    let p = 913;
+    const levels = [];
+    rows.forEach((r, i) => {
+      const z = i === 0 ? 874 : r.z;
+      const t = r.t + warm * Math.max(0, 1 - (z - 874) / 2500);
+      if (i > 0) p *= Math.exp((-9.80665 * (z - levels[i - 1].heightM)) / (287.04 * ((levels[i - 1].temperatureC + t) / 2 + 273.15)));
+      levels.push({ pressureHpa: Math.round(p * 10) / 10, heightM: Math.round(z), temperatureC: Math.round(t * 10) / 10, dewPointC: Math.round((t - 11 - z / 900) * 10) / 10, windDirectionDeg: r.dir, windSpeedMps: Math.round(r.kt * 0.514 * 10) / 10 });
+    });
+    return { validAt, levels: levels.filter((l) => l.pressureHpa >= 250) };
+  };
+  for (const site of sites.sites) {
+    write(`raob/sites/${site.slug}.json`, {
+      schemaVersion: 1,
+      source: "Sample: the NWS Soaring Forecast table with a synthetic dew point",
+      generatedAt: new Date(now).toISOString(),
+      site: { slug: site.slug, name: site.name },
+      station: { id: "KBOI", name: "Boise", latitude: 43.5677, longitude: -116.2109, distanceKm: 20, elevationM: 874 },
+      soundings: [flight("2026-09-29T12:00:00Z", 0), flight("2026-09-29T00:00:00Z", 12)],
+    });
+  }
+}
 write(nwsPaths.manifest(), buildManifest({ now, sites: siteEntries, offices: [{ office: "BOI", afdIssuanceTime: new Date(now - 3 * HOUR).toISOString(), srgIssuanceTime: null }] }));
 
 // ECMWF: synthetic Open-Meteo responses run through the real parser. A daily

@@ -78,7 +78,7 @@ export function fitGeometry(s: Sounding, box: { left: number; right: number; top
   const add = (t: number, p: number) => skewed.push(t + SKEW_C_PER_LNP * (Math.log(pBottom) - Math.log(p)));
   for (const p of s.points) {
     add(p.temperatureC, p.pressureHpa);
-    add(p.dewPointC, p.pressureHpa);
+    if (Number.isFinite(p.dewPointC)) add(p.dewPointC, p.pressureHpa);
   }
   for (const p of s.parcel) add(p.parcelC, p.pressureHpa);
   const min = Math.min(...skewed);
@@ -160,8 +160,8 @@ export class SkewTChart {
       if (yb - ya < 1) return;
       el("rect", { x: x0, y: ya, width: x1 - x0, height: yb - ya, class: cls }, plot);
     };
-    const thermalTop = s.usableLiftTopM ?? s.boundaryLayerTopM;
-    if (thermalTop !== null && s.thermalVelocityMps >= 0.1 && thermalTop > s.modelElevationM) band(s.modelElevationM, thermalTop, "skewt-thermal-zone");
+    const zoneTop = s.marks.zoneTopM;
+    if (zoneTop !== null) band(s.modelElevationM, zoneTop, "skewt-thermal-zone");
     for (const layer of s.inversions) band(layer.baseM, layer.topM, layer.kind === "inversion" ? "skewt-lid" : "skewt-lid skewt-lid-soft");
     for (const layer of s.cloudLayers) band(layer.baseM, layer.topM, "skewt-cloud-layer", box.right - Math.min(150, (box.right - box.left) * 0.3), box.right);
 
@@ -217,11 +217,13 @@ export class SkewTChart {
     // Traces.
     const path = (pts: [number, number][]) => pts.map(([t, p], i) => `${i ? "L" : "M"}${x(t, p).toFixed(1)},${y(p).toFixed(1)}`).join("");
     el("path", { d: path(s.parcel.map((r) => [r.parcelC, r.pressureHpa])), class: "skewt-parcel" }, plot);
-    el("path", { d: path(s.points.map((p) => [p.dewPointC, p.pressureHpa])), class: "skewt-dew" }, plot);
+    if (s.hasDewPoint) el("path", { d: path(s.points.filter((p) => Number.isFinite(p.dewPointC)).map((p) => [p.dewPointC, p.pressureHpa])), class: "skewt-dew" }, plot);
     el("path", { d: path(s.points.map((p) => [p.temperatureC, p.pressureHpa])), class: "skewt-temp" }, plot);
+    // Dots mark the published levels; a balloon's dense profile draws as a line alone.
+    const dots = s.points.length <= 40;
     for (const p of s.points) {
-      el("circle", { cx: x(p.temperatureC, p.pressureHpa), cy: y(p.pressureHpa), r: 2.6, class: "skewt-temp-dot" }, plot);
-      el("circle", { cx: x(p.dewPointC, p.pressureHpa), cy: y(p.pressureHpa), r: 2.6, class: "skewt-dew-dot" }, plot);
+      if (dots) el("circle", { cx: x(p.temperatureC, p.pressureHpa), cy: y(p.pressureHpa), r: 2.6, class: "skewt-temp-dot" }, plot);
+      if (Number.isFinite(p.dewPointC) && dots) el("circle", { cx: x(p.dewPointC, p.pressureHpa), cy: y(p.pressureHpa), r: 2.6, class: "skewt-dew-dot" }, plot);
     }
 
     // Trace names at the ground, where they are furthest apart.
@@ -236,22 +238,21 @@ export class SkewTChart {
       text(plot, px + (anchor === "start" ? 6 : -6), box.bottom - 8, label, { class: `skewt-name ${cls}`, "text-anchor": anchor });
     };
     if (!narrow) {
-      nameAt(p0.dewPointC, "Dew point", "skewt-name-dew", "end");
+      if (Number.isFinite(p0.dewPointC)) nameAt(p0.dewPointC, "Dew point", "skewt-name-dew", "end");
       nameAt(p0.temperatureC, "Temperature", "skewt-name-temp", "start");
     }
 
     // Horizontal marks, named on the right; labels solved so they never overlap.
     const marks: { id: string; z: number; label: string; cls: string }[] = [];
     if (this.launch.elevationM !== null && inside(this.launch.elevationM)) marks.push({ id: "launch", z: this.launch.elevationM, label: `Launch ${ftLabel(this.launch.elevationM)}`, cls: "skewt-mark-launch" });
-    if (s.thermalVelocityMps >= 0.1 && inside(s.usableLiftTopM)) marks.push({ id: "top", z: s.usableLiftTopM, label: `Top of lift ≈ ${ftLabel(s.usableLiftTopM)}`, cls: "skewt-mark-top" });
-    const cumulus = s.thermalVelocityMps >= 0.1 && s.boundaryLayerTopM !== null && s.cloudBaseM !== null && s.cloudBaseM <= s.boundaryLayerTopM + 100;
-    if (inside(s.cloudBaseM) && cumulus) marks.push({ id: "base", z: s.cloudBaseM, label: `☁ Cloud base ≈ ${ftLabel(s.cloudBaseM)}`, cls: "skewt-mark-base" });
+    if (s.marks.top && inside(s.marks.top.heightM)) marks.push({ id: "top", z: s.marks.top.heightM, label: s.marks.top.label, cls: "skewt-mark-top" });
+    if (inside(s.marks.cloudBaseM)) marks.push({ id: "base", z: s.marks.cloudBaseM, label: `☁ Cloud base ≈ ${ftLabel(s.marks.cloudBaseM)}`, cls: "skewt-mark-base" });
     if (inside(s.freezingLevelM) && s.freezingLevelM > s.modelElevationM + 50) marks.push({ id: "freezing", z: s.freezingLevelM, label: `Freezing level ${ftLabel(s.freezingLevelM)}`, cls: "skewt-mark-freezing" });
     for (const m of marks) el("line", { x1: box.left, x2: box.right, y1: y(pAt(m.z)), y2: y(pAt(m.z)), class: m.cls }, svg);
 
     const zoneLabels: { id: string; z: number; label: string; cls: string }[] = [];
-    if (thermalTop !== null && s.thermalVelocityMps >= 0.1 && thermalTop > s.modelElevationM + 150) {
-      zoneLabels.push({ id: "zone", z: (s.modelElevationM + Math.min(thermalTop, zTop)) / 2, label: "Thermal zone", cls: "skewt-zone-label" });
+    if (zoneTop !== null && zoneTop > s.modelElevationM + 150) {
+      zoneLabels.push({ id: "zone", z: (s.modelElevationM + Math.min(zoneTop, zTop)) / 2, label: "Thermal zone", cls: "skewt-zone-label" });
     }
     for (const layer of s.inversions) {
       if (layer.topM - layer.baseM < 60 || !inside(layer.baseM)) continue;
@@ -279,10 +280,13 @@ export class SkewTChart {
     // Wind: barbs (knots, the standard) with the speed in mph beside them.
     const windX = box.right + (narrow ? 16 : 20);
     text(svg, box.right + (narrow ? 26 : 34), box.top - 8, "mph", { class: "tick", "text-anchor": "middle" });
+    // A balloon reports many levels: draw a barb only where it has room.
+    let lastBarbY = Infinity;
     for (const p of s.points) {
       if (p.windSpeedMps === null || p.windDirectionDeg === null) continue;
       const yy = y(p.pressureHpa);
-      if (yy < box.top + 12) continue;
+      if (yy < box.top + 12 || lastBarbY - yy < 15) continue;
+      lastBarbY = yy;
       drawBarb(svg, windX, yy, p.windSpeedMps * KT, p.windDirectionDeg);
       text(svg, windX + (narrow ? 20 : 28), yy + 4, String(Math.round(p.windSpeedMps * MPH)), { class: "tick", "text-anchor": "end" });
     }
@@ -322,13 +326,11 @@ export class SkewTChart {
     const wind = windAtHeight(s.points, z);
     const parcel = [...s.parcel].sort((a, b) => Math.abs(a.heightM - z) - Math.abs(b.heightM - z))[0];
     const spread = env.temperatureC - env.dewPointC;
-    const rows: [string, string][] = [
-      ["Temperature", `${env.temperatureC.toFixed(1)} °C (${fToC(env.temperatureC)} °F)`],
-      ["Dew point", `${env.dewPointC.toFixed(1)} °C · ${spread <= 1 ? "saturated: cloud" : spread <= 3 ? "moist" : "dry"}`],
-    ];
+    const rows: [string, string][] = [["Temperature", `${env.temperatureC.toFixed(1)} °C (${fToC(env.temperatureC)} °F)`]];
+    if (Number.isFinite(env.dewPointC)) rows.push(["Dew point", `${env.dewPointC.toFixed(1)} °C · ${spread <= 1 ? "saturated: cloud" : spread <= 3 ? "moist" : "dry"}`]);
     if (wind) rows.push(["Wind", wind.speedMps * MPH < 2 ? "calm" : `${compassPoint(wind.directionDeg)} ${Math.round(wind.speedMps * MPH)} mph`]);
     let note = "";
-    if (s.thermalVelocityMps >= 0.1 && parcel) {
+    if (s.marks.zoneTopM !== null && parcel) {
       note = parcel.buoyancyC > 0.2
         ? `A thermal here is ${parcel.buoyancyC.toFixed(1)} °C warmer than the air: it keeps rising.`
         : parcel.buoyancyC < -0.2

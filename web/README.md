@@ -6,7 +6,7 @@ Cloudflare Worker.
 | Page | What it shows |
 | --- | --- |
 | `/` | Map and list of launches |
-| `/launches/<slug>` | Day and model selectors, the soaring meteogram, the Skew-T sounding for any hour of the day (annotated with the thermal zone, top of lift, cloud base, inversions and cloud layers, with a plain-language reading beside it), the sunlight map (W/m² on the terrain every 15 minutes, with a slider, play button and a daily curve for the launch or a tapped spot), the NWS hourly charts (wind, gusts, transport wind, direction against the launch's wind window, mixing height, clouds and storms), the ECMWF IFS hourly charts (wind, gusts, 850 hPa wind, boundary-layer height, cloud layers), and the NWS text products |
+| `/launches/<slug>` | Day and model selectors, the soaring meteogram, the Skew-T sounding for any hour of the day (annotated with the thermal zone, top of lift, cloud base, inversions and cloud layers, with a plain-language reading beside it), the sunlight map (W/m² on the terrain every 15 minutes, with a slider, play button and a daily curve for the launch or a tapped spot), the NWS hourly charts (wind, gusts, transport wind, direction against the launch's wind window, mixing height, clouds and storms), the ECMWF IFS hourly charts (wind, gusts, 850 hPa wind, boundary-layer height, cloud layers), and the NWS text products with a Skew-T of the latest weather balloon (and the Soaring Forecast's model hours), read for pilots |
 | `/about` | What the charts show, data sources, safety note |
 | `/admin` | Add and edit launches (Cloudflare Access login) |
 
