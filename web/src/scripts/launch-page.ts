@@ -99,7 +99,8 @@ function button(label: string, sub: string | null, pressed: boolean, disabled: b
 // ── state ────────────────────────────────────────────────────────────────
 
 const days = nextDateKeys(DAYS);
-let day = days[0];
+// After the day's flying hours, open on tomorrow.
+let day = localHourOfDay(new Date().toISOString(), tz) > DAY_END ? days[1] : days[0];
 let model: string | null = null;
 let catalogue: ModelCatalogue | null = null;
 let launchElevationM: number | null = null;
