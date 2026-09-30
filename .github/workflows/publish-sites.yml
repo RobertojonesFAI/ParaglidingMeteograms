@@ -5,7 +5,9 @@
 #                          cover, republished when it is stale
 #   4. solar/<slug>/       terrain tiles for each launch's sunlight map (slopes,
 #                          sky view and horizons), rebuilt only for launches that
-#                          are new or moved (~2-3 minutes each)
+#                          are new, moved, or whose area changed (~2-3 minutes
+#                          each; a whole range from sunlight-areas.json, such as
+#                          King Mountain's Lost River Range, ~30-60 minutes)
 #
 # Run this once by hand (Actions tab -> Publish launches -> Run workflow)
 # before the first "Build forecasts" run: builds read sites.json from the bucket.
@@ -18,9 +20,11 @@ on:
     branches: [main]
     paths:
       - "forecasts/sites.json"
+      - "forecasts/sunlight-areas.json"
       - "forecasts/pnpm-lock.yaml"
       - "forecasts/scripts/lib/solar.mjs"
       - "forecasts/scripts/solar.mjs"
+      - "forecasts/scripts/lib/sunlight-areas.mjs"
       - ".github/workflows/publish-sites.yml"
   workflow_dispatch:
 
@@ -35,7 +39,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && vars.METEO_R2_BUCKET != ''
-    timeout-minutes: 45
+    # A launch whose sunlight area is a whole range takes most of an hour the first time.
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: forecasts

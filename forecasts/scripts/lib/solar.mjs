@@ -40,6 +40,14 @@ export const AZIMUTHS_DEG = Array.from({ length: 18 }, (_, i) => i * 20);
 export const HORIZON_STEP_DEG = 0.3;
 export const DEFAULT_RADIUS_KM = 15;
 export const DEFAULT_MAX_DISTANCE_KM = 20;
+/**
+ * Side of the blocks a domain is built in, in zoom-14 pixels (16 tiles, ~28 km):
+ * a multiple of a zoom-11 tile, so no tile spans two blocks. Memory then stays
+ * the same however large a launch's area is.
+ */
+export const BLOCK_PX = 16 * TILE_SIZE;
+/** Metres of fine elevation read around a block (the normals' border and the relief's outer corners). */
+export const FINE_MARGIN_M = 250;
 
 const DEG = Math.PI / 180;
 const WGS84_A = 6378137;
@@ -117,6 +125,14 @@ function bilinearAt(values, width, height, x, y) {
 
 // ── Domain ──────────────────────────────────────────────────────────────────
 
+/** A domain from a zoom-14 pixel box [x0, x1) x [y0, y1), with its geographic bounds. */
+function boxDomain(x0, y0, x1, y1) {
+  return {
+    x0, y0, x1, y1,
+    bounds: { south: yToLat(y1, MAX_ZOOM), west: xToLon(x0, MAX_ZOOM), north: yToLat(y0, MAX_ZOOM), east: xToLon(x1, MAX_ZOOM) },
+  };
+}
+
 /**
  * The square of zoom-14 tiles covering `radiusKm` around a point. Returns the
  * zoom-14 pixel box [x0, x1) x [y0, y1) and its geographic bounds.
@@ -129,10 +145,36 @@ export function domainFor(latitude, longitude, radiusKm) {
   const y0 = Math.floor((cy - r) / TILE_SIZE) * TILE_SIZE;
   const x1 = (Math.floor((cx + r) / TILE_SIZE) + 1) * TILE_SIZE;
   const y1 = (Math.floor((cy + r) / TILE_SIZE) + 1) * TILE_SIZE;
-  return {
-    x0, y0, x1, y1,
-    bounds: { south: yToLat(y1, MAX_ZOOM), west: xToLon(x0, MAX_ZOOM), north: yToLat(y0, MAX_ZOOM), east: xToLon(x1, MAX_ZOOM) },
-  };
+  return boxDomain(x0, y0, x1, y1);
+}
+
+/** The zoom-14 tiles covering a geographic box (a launch's own area, see sunlight-areas.json). */
+export function domainForBounds({ south, west, north, east }) {
+  const x0 = Math.floor(lonToX(west, MAX_ZOOM) / TILE_SIZE) * TILE_SIZE;
+  const y0 = Math.floor(latToY(north, MAX_ZOOM) / TILE_SIZE) * TILE_SIZE;
+  const x1 = Math.ceil(lonToX(east, MAX_ZOOM) / TILE_SIZE) * TILE_SIZE;
+  const y1 = Math.ceil(latToY(south, MAX_ZOOM) / TILE_SIZE) * TILE_SIZE;
+  return boxDomain(x0, y0, x1, y1);
+}
+
+/** A launch's sunlight-map domain: its own area when it has one, else the square of `radiusKm` around it. */
+export function domainOf(site, { radiusKm = DEFAULT_RADIUS_KM, area } = {}) {
+  return area ? domainForBounds(area) : domainFor(site.latitude, site.longitude, radiusKm);
+}
+
+/**
+ * Splits a domain into blocks of at most BLOCK_PX x BLOCK_PX zoom-14 pixels,
+ * on a grid aligned to zoom-11 tiles, so every tile of every zoom lies in
+ * exactly one block and a large area is built one block at a time.
+ */
+export function blocksOf(domain) {
+  const blocks = [];
+  for (let by = Math.floor(domain.y0 / BLOCK_PX) * BLOCK_PX; by < domain.y1; by += BLOCK_PX) {
+    for (let bx = Math.floor(domain.x0 / BLOCK_PX) * BLOCK_PX; bx < domain.x1; bx += BLOCK_PX) {
+      blocks.push(boxDomain(Math.max(bx, domain.x0), Math.max(by, domain.y0), Math.min(bx + BLOCK_PX, domain.x1), Math.min(by + BLOCK_PX, domain.y1)));
+    }
+  }
+  return blocks;
 }
 
 /** Geographic box around `bounds` extended by `metres` on every side. */
@@ -207,6 +249,8 @@ export function surfaceLevel(fine, domain) {
   return {
     level: { z, x0: domain.x0, y0: domain.y0, width, height, nx, ny, nz, svf: new Float32Array(n) },
     meanElevationM: count > 0 ? sum / count : Number.NaN,
+    elevationSum: sum,
+    elevationCount: count,
   };
 }
 
@@ -224,13 +268,26 @@ export function rayDistances(maxDistanceM, firstStepM = 25) {
  * direction of AZIMUTHS_DEG from the centre of each zoom-12 pixel in the domain
  * plus a one-cell ring, over the coarse elevation model. Accounts for earth
  * curvature and standard refraction.
+ *
+ * With `block`, only the cells that block's tiles read: the block and the
+ * horizon border of its zoom-11 tiles, never past the domain's own ring, so a
+ * domain built block by block gets exactly the tiles it gets in one go.
  */
-export function traceHorizons(coarse, domain, { maxDistanceM = DEFAULT_MAX_DISTANCE_KM * 1000, log = () => {} } = {}) {
+export function traceHorizons(coarse, domain, { maxDistanceM = DEFAULT_MAX_DISTANCE_KM * 1000, block = null, log = () => {} } = {}) {
   const shift = 2 ** (MAX_ZOOM - HORIZON_ZOOM);
-  const x0 = domain.x0 / shift - 1;
-  const y0 = domain.y0 / shift - 1;
-  const width = (domain.x1 - domain.x0) / shift + 2;
-  const height = (domain.y1 - domain.y0) / shift + 2;
+  let x0 = domain.x0 / shift - 1;
+  let y0 = domain.y0 / shift - 1;
+  let x1 = domain.x1 / shift + 1;
+  let y1 = domain.y1 / shift + 1;
+  if (block) {
+    const pad = HORIZON_BORDER * CELL_PX * 2 ** (HORIZON_ZOOM - MIN_ZOOM);
+    x0 = Math.max(x0, block.x0 / shift - pad);
+    y0 = Math.max(y0, block.y0 / shift - pad);
+    x1 = Math.min(x1, block.x1 / shift + pad);
+    y1 = Math.min(y1, block.y1 / shift + pad);
+  }
+  const width = x1 - x0;
+  const height = y1 - y0;
   const midLat = (domain.bounds.south + domain.bounds.north) / 2;
   const m = metresPerDegree(midLat);
   const dist = rayDistances(maxDistanceM);
@@ -487,37 +544,57 @@ export function tileRange(level) {
 export const RELIEF_VERSION = 1;
 /** Relief heights sit on the corners of this zoom's pixels (about 55 m apart at 44° N). */
 export const RELIEF_ZOOM = 11;
+/** Longest relief side, in heights; a larger area drops to a coarser zoom so the 3D view stays light. */
+export const RELIEF_MAX_SIDE = 1200;
 const RELIEF_OFFSET_M = 500;
 const RELIEF_SCALE = 10;
 
-/**
- * Elevation on a regular Web Mercator grid over the square, for drawing the
- * terrain in 3D: one height per corner of the zoom-11 pixels, so the grid's
- * edges are the square's edges and the sunlight tiles drape onto it exactly.
- *
- * Stored as unsigned 16-bit little-endian values, (elevation + 500 m) in
- * decimetres (0 = no data), row by row from the north-west corner, each
- * row-delta filtered like the tiles (differences taken modulo 65536), gzipped.
- */
-export function buildRelief(fine, domain, generation) {
-  const f = 2 ** (MAX_ZOOM - RELIEF_ZOOM);
+/** The finest zoom (RELIEF_ZOOM at most) whose relief of the domain fits RELIEF_MAX_SIDE. */
+export function reliefZoomFor(domain) {
+  let z = RELIEF_ZOOM;
+  while (z > 0 && Math.max(domain.x1 - domain.x0, domain.y1 - domain.y0) / 2 ** (MAX_ZOOM - z) + 2 > RELIEF_MAX_SIDE) z -= 1;
+  return z;
+}
+
+/** An empty relief grid over the domain, filled block by block with fillRelief. */
+export function reliefFrame(domain) {
+  const zoom = reliefZoomFor(domain);
+  const f = 2 ** (MAX_ZOOM - zoom);
   const x0 = Math.floor(domain.x0 / f);
   const y0 = Math.floor(domain.y0 / f);
   const width = Math.ceil(domain.x1 / f) - x0 + 1;
   const height = Math.ceil(domain.y1 / f) - y0 + 1;
-  const values = new Uint16Array(width * height);
-  let min = Infinity;
-  let max = -Infinity;
+  return { domain, zoom, f, x0, y0, width, height, values: new Uint16Array(width * height), min: Infinity, max: -Infinity };
+}
+
+/**
+ * Fills the relief heights that fall in `block` (all of them without one) from
+ * a fine elevation grid covering it. Heights on a block edge are filled by
+ * both blocks, with the same value.
+ */
+export function fillRelief(frame, fine, block = frame.domain) {
+  const { domain, zoom, f, x0, y0, width, height, values } = frame;
+  const within = (p, lo, hi, blo, bhi) => {
+    const c = Math.min(Math.max(p, lo), hi);
+    return c >= blo && c <= bhi;
+  };
   for (let j = 0; j < height; j += 1) {
-    const lat = yToLat(y0 + j, RELIEF_ZOOM);
+    if (!within((y0 + j) * f, domain.y0, domain.y1, block.y0, block.y1)) continue;
+    const lat = yToLat(y0 + j, zoom);
     for (let i = 0; i < width; i += 1) {
-      const v = sampleGrid(fine, lat, xToLon(x0 + i, RELIEF_ZOOM));
+      if (!within((x0 + i) * f, domain.x0, domain.x1, block.x0, block.x1)) continue;
+      const v = sampleGrid(fine, lat, xToLon(x0 + i, zoom));
       if (Number.isNaN(v)) continue;
       values[j * width + i] = Math.min(65535, Math.max(1, Math.round((v + RELIEF_OFFSET_M) * RELIEF_SCALE)));
-      min = Math.min(min, v);
-      max = Math.max(max, v);
+      frame.min = Math.min(frame.min, v);
+      frame.max = Math.max(frame.max, v);
     }
   }
+}
+
+/** The relief file and its index entry. */
+export function encodeRelief(frame, generation) {
+  const { zoom, x0, y0, width, height, values } = frame;
   const bytes = Buffer.alloc(values.length * 2);
   for (let k = 0; k < values.length; k += 1) {
     const prev = k % width === 0 ? (k === 0 ? 0 : values[k - width]) : values[k - 1];
@@ -529,19 +606,35 @@ export function buildRelief(fine, domain, generation) {
     meta: {
       version: RELIEF_VERSION,
       path: `${generation}/relief-v${RELIEF_VERSION}.bin.gz`,
-      zoom: RELIEF_ZOOM,
+      zoom,
       x0,
       y0,
       width,
       height,
       offsetM: RELIEF_OFFSET_M,
       scale: RELIEF_SCALE,
-      minM: round(min, 0),
-      maxM: round(max, 0),
+      minM: round(frame.min, 0),
+      maxM: round(frame.max, 0),
       encoding: "uint16 little-endian, (elevation m + offsetM) * scale, 0 = no data; row-delta (mod 65536); gzip",
       bytes: body.length,
     },
   };
+}
+
+/**
+ * Elevation on a regular Web Mercator grid over the domain, for drawing the
+ * terrain in 3D: one height per corner of the zoom-11 pixels (coarser for a
+ * large area, see reliefZoomFor), so the grid's edges are the domain's edges
+ * and the sunlight tiles drape onto it exactly.
+ *
+ * Stored as unsigned 16-bit little-endian values, (elevation + 500 m) in
+ * decimetres (0 = no data), row by row from the north-west corner, each
+ * row-delta filtered like the tiles (differences taken modulo 65536), gzipped.
+ */
+export function buildRelief(fine, domain, generation) {
+  const frame = reliefFrame(domain);
+  fillRelief(frame, fine);
+  return encodeRelief(frame, generation);
 }
 
 /** Decodes a relief file's (gunzipped) bytes into heights in metres, NaN where there is no data. */
@@ -572,106 +665,152 @@ export function generationOf(inputs) {
 const round = (v, digits) => (Number.isFinite(v) ? Number(v.toFixed(digits)) : null);
 
 /**
- * Builds every tile and the index for one launch.
- * @param {{ slug: string, latitude: number, longitude: number }} site
- * @param {{ fine: Grid, coarse: Grid, sources: object, radiusKm?: number, maxDistanceKm?: number, generatedAt?: string, log?: (m: string) => void }} options
- * @returns {{ index: object, tiles: { z: number, x: number, y: number, body: Buffer }[], relief: { meta: object, body: Buffer } }}
+ * Starts building one launch's tiles, block by block, so a large area never
+ * has to be in memory at once:
+ *
+ *   const build = startSolarTerrain(site, { coarse, sources, radiusKm or area, maxDistanceKm });
+ *   for (const block of build.blocks) tiles = build.addBlock(block, fineGridCoveringTheBlock);
+ *   const { index, relief } = build.finish();
+ *
+ * `area` ({ name, south, west, north, east }) replaces the square of `radiusKm`
+ * around the launch; the launch must be inside it.
  */
-export function buildSolarTerrain(site, { fine, coarse, sources, radiusKm = DEFAULT_RADIUS_KM, maxDistanceKm = DEFAULT_MAX_DISTANCE_KM, generatedAt, log = () => {} }) {
-  const inputs = { latitude: site.latitude, longitude: site.longitude, radiusKm, maxDistanceKm, algorithmVersion: ALGORITHM_VERSION, sources: Object.fromEntries(Object.entries(sources).map(([k, v]) => [k, v.id])) };
+export function startSolarTerrain(site, { coarse, sources, radiusKm = DEFAULT_RADIUS_KM, area, maxDistanceKm = DEFAULT_MAX_DISTANCE_KM, log = () => {} }) {
+  const inputs = {
+    latitude: site.latitude,
+    longitude: site.longitude,
+    ...(area ? { area } : { radiusKm }),
+    maxDistanceKm,
+    algorithmVersion: ALGORITHM_VERSION,
+    sources: Object.fromEntries(Object.entries(sources).map(([k, v]) => [k, v.id])),
+  };
   const generation = generationOf(inputs);
-  const domain = domainFor(site.latitude, site.longitude, radiusKm);
-  log(`${site.slug}: ${(domain.x1 - domain.x0) / TILE_SIZE} x ${(domain.y1 - domain.y0) / TILE_SIZE} tiles at zoom ${MAX_ZOOM}`);
+  const domain = domainOf(site, { radiusKm, area });
+  const LX = Math.floor(lonToX(site.longitude, MAX_ZOOM));
+  const LY = Math.floor(latToY(site.latitude, MAX_ZOOM));
+  if (LX < domain.x0 || LX >= domain.x1 || LY < domain.y0 || LY >= domain.y1) throw new Error(`${site.slug}: the launch is outside its sunlight area`);
+  const blocks = blocksOf(domain);
+  log(`${site.slug}: ${(domain.x1 - domain.x0) / TILE_SIZE} x ${(domain.y1 - domain.y0) / TILE_SIZE} tiles at zoom ${MAX_ZOOM}${blocks.length > 1 ? `, in ${blocks.length} blocks` : ""}`);
 
-  let t = Date.now();
-  const { level: top, meanElevationM } = surfaceLevel(fine, domain);
-  log(`${site.slug}: surface normals in ${Date.now() - t} ms`);
-  t = Date.now();
-  const horizonGrid = traceHorizons(coarse, domain, { maxDistanceM: maxDistanceKm * 1000, log });
-  log(`${site.slug}: horizons for ${horizonGrid.width * horizonGrid.height} cells in ${Math.round((Date.now() - t) / 1000)} s`);
-  t = Date.now();
-  fillSkyView(top, horizonGrid);
-  log(`${site.slug}: sky-view factor in ${Math.round((Date.now() - t) / 1000)} s`);
-
-  const levels = [top];
-  while (levels[0].z > MIN_ZOOM) levels.unshift(halveLevel(levels[0]));
-
-  const tiles = [];
+  const frame = reliefFrame(domain);
   const ranges = {};
-  let rawBytes = 0;
-  for (const level of levels) {
-    const [x0, y0, x1, y1] = tileRange(level);
-    ranges[level.z] = [x0, y0, x1, y1];
-    for (let y = y0; y <= y1; y += 1) {
-      for (let x = x0; x <= x1; x += 1) {
-        const { bytes, valid } = encodeTile(level, horizonGrid, x, y);
-        if (valid === 0) continue;
-        rawBytes += bytes.length;
-        tiles.push({ z: level.z, x, y, body: gzipSync(bytes, { level: 9 }) });
+  let count = 0, bytes = 0, rawBytes = 0, elevationSum = 0, elevationCount = 0, done = 0;
+  let launch = null;
+
+  function addBlock(block, fine) {
+    const label = blocks.length > 1 ? `${site.slug} block ${done + 1}/${blocks.length}` : site.slug;
+    let t = Date.now();
+    const { level: top, elevationSum: sum, elevationCount: n } = surfaceLevel(fine, block);
+    elevationSum += sum;
+    elevationCount += n;
+    log(`${label}: surface normals in ${Date.now() - t} ms`);
+    t = Date.now();
+    const horizonGrid = traceHorizons(coarse, domain, { maxDistanceM: maxDistanceKm * 1000, block, log });
+    log(`${label}: horizons for ${horizonGrid.width * horizonGrid.height} cells in ${Math.round((Date.now() - t) / 1000)} s`);
+    t = Date.now();
+    fillSkyView(top, horizonGrid);
+    log(`${label}: sky-view factor in ${Math.round((Date.now() - t) / 1000)} s`);
+
+    const levels = [top];
+    while (levels[0].z > MIN_ZOOM) levels.unshift(halveLevel(levels[0]));
+    const tiles = [];
+    for (const level of levels) {
+      const [x0, y0, x1, y1] = tileRange(level);
+      const r = ranges[level.z];
+      ranges[level.z] = r ? [Math.min(r[0], x0), Math.min(r[1], y0), Math.max(r[2], x1), Math.max(r[3], y1)] : [x0, y0, x1, y1];
+      for (let y = y0; y <= y1; y += 1) {
+        for (let x = x0; x <= x1; x += 1) {
+          const { bytes: raw, valid } = encodeTile(level, horizonGrid, x, y);
+          if (valid === 0) continue;
+          rawBytes += raw.length;
+          tiles.push({ z: level.z, x, y, body: gzipSync(raw, { level: 9 }) });
+        }
       }
     }
+    count += tiles.length;
+    bytes += tiles.reduce((s, tile) => s + tile.body.length, 0);
+    fillRelief(frame, fine, block);
+
+    // The launch itself, for checks and for the page.
+    if (LX >= block.x0 && LX < block.x1 && LY >= block.y0 && LY < block.y1) {
+      const o = (LY - top.y0) * top.width + (LX - top.x0);
+      const horizons = horizonsAtPixel(horizonGrid, LX, LY, new Float32Array(AZIMUTHS_DEG.length));
+      launch = {
+        elevationM: round(sampleGrid(fine, site.latitude, site.longitude), 1),
+        slopeDeg: round(Math.acos(Math.min(1, top.nz[o])) / DEG, 1),
+        aspectDeg: round((Math.atan2(top.nx[o], top.ny[o]) / DEG + 360) % 360, 0),
+        skyViewFactor: round(top.svf[o], 3),
+        horizonDeg: Array.from(horizons, (h) => round(h, 1)),
+      };
+    }
+    done += 1;
+    return tiles;
   }
-  const gz = tiles.reduce((s, tile) => s + tile.body.length, 0);
-  log(`${site.slug}: ${tiles.length} tiles, ${(gz / 1e6).toFixed(1)} MB compressed (${(rawBytes / 1e6).toFixed(0)} MB raw)`);
-  const relief = buildRelief(fine, domain, generation);
-  log(`${site.slug}: relief ${relief.meta.width} x ${relief.meta.height}, ${relief.meta.minM}–${relief.meta.maxM} m, ${(relief.body.length / 1e3).toFixed(0)} kB`);
 
-  // The launch itself, for checks and for the page.
-  const X = Math.floor(lonToX(site.longitude, MAX_ZOOM)) - top.x0;
-  const Y = Math.floor(latToY(site.latitude, MAX_ZOOM)) - top.y0;
-  const o = Y * top.width + X;
-  const launchHorizons = horizonsAtPixel(horizonGrid, top.x0 + X, top.y0 + Y, new Float32Array(AZIMUTHS_DEG.length));
-  const slope = Math.acos(Math.min(1, top.nz[o])) / DEG;
-  const aspect = (Math.atan2(top.nx[o], top.ny[o]) / DEG + 360) % 360;
+  function finish({ generatedAt } = {}) {
+    if (done !== blocks.length) throw new Error(`${site.slug}: ${blocks.length - done} block(s) not built`);
+    log(`${site.slug}: ${count} tiles, ${(bytes / 1e6).toFixed(1)} MB compressed (${(rawBytes / 1e6).toFixed(0)} MB raw)`);
+    const relief = encodeRelief(frame, generation);
+    log(`${site.slug}: relief ${relief.meta.width} x ${relief.meta.height} at zoom ${relief.meta.zoom}, ${relief.meta.minM}–${relief.meta.maxM} m, ${(relief.body.length / 1e3).toFixed(0)} kB`);
+    const index = {
+      schemaVersion: SCHEMA_VERSION,
+      slug: site.slug,
+      generatedAt: generatedAt ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+      generation,
+      inputs,
+      sources,
+      bounds: Object.fromEntries(Object.entries(domain.bounds).map(([k, v]) => [k, round(v, 6)])),
+      referenceElevationM: round(elevationCount > 0 ? elevationSum / elevationCount : Number.NaN, 0),
+      tiles: {
+        path: `${generation}/{z}/{x}/{y}.bin.gz`,
+        size: TILE_SIZE,
+        minZoom: MIN_ZOOM,
+        maxZoom: MAX_ZOOM,
+        ranges,
+        count,
+        bytes,
+      },
+      encoding: {
+        planes: ["nx", "ny", "nz", "svf"],
+        normal: "nx, ny: byte / 127.5 - 1 (east, north components); nz, svf: byte / 255; nz = 0 marks no data",
+        horizonCells: HORIZON_CELLS,
+        horizonBorder: HORIZON_BORDER,
+        azimuthsDeg: AZIMUTHS_DEG,
+        horizonStepDeg: HORIZON_STEP_DEG,
+        delta: "row",
+        compression: "gzip",
+      },
+      launch,
+      relief: relief.meta,
+    };
+    return { index, relief };
+  }
 
-  const index = {
-    schemaVersion: SCHEMA_VERSION,
-    slug: site.slug,
-    generatedAt: generatedAt ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-    generation,
-    inputs,
-    sources,
-    bounds: Object.fromEntries(Object.entries(domain.bounds).map(([k, v]) => [k, round(v, 6)])),
-    referenceElevationM: round(meanElevationM, 0),
-    tiles: {
-      path: `${generation}/{z}/{x}/{y}.bin.gz`,
-      size: TILE_SIZE,
-      minZoom: MIN_ZOOM,
-      maxZoom: MAX_ZOOM,
-      ranges,
-      count: tiles.length,
-      bytes: gz,
-    },
-    encoding: {
-      planes: ["nx", "ny", "nz", "svf"],
-      normal: "nx, ny: byte / 127.5 - 1 (east, north components); nz, svf: byte / 255; nz = 0 marks no data",
-      horizonCells: HORIZON_CELLS,
-      horizonBorder: HORIZON_BORDER,
-      azimuthsDeg: AZIMUTHS_DEG,
-      horizonStepDeg: HORIZON_STEP_DEG,
-      delta: "row",
-      compression: "gzip",
-    },
-    launch: {
-      elevationM: round(sampleGrid(fine, site.latitude, site.longitude), 1),
-      slopeDeg: round(slope, 1),
-      aspectDeg: round(aspect, 0),
-      skyViewFactor: round(top.svf[o], 3),
-      horizonDeg: Array.from(launchHorizons, (h) => round(h, 1)),
-    },
-    relief: relief.meta,
-  };
-  return { index, tiles, relief };
+  return { domain, blocks, generation, addBlock, finish };
+}
+
+/**
+ * Builds every tile and the index for one launch from elevation grids that
+ * cover its whole domain (fine) and 20 km around it (coarse).
+ * @param {{ slug: string, latitude: number, longitude: number }} site
+ * @param {{ fine: Grid, coarse: Grid, sources: object, radiusKm?: number, area?: object, maxDistanceKm?: number, generatedAt?: string, log?: (m: string) => void }} options
+ * @returns {{ index: object, tiles: { z: number, x: number, y: number, body: Buffer }[], relief: { meta: object, body: Buffer } }}
+ */
+export function buildSolarTerrain(site, { fine, generatedAt, ...options }) {
+  const build = startSolarTerrain(site, options);
+  const tiles = [];
+  for (const block of build.blocks) for (const tile of build.addBlock(block, fine)) tiles.push(tile);
+  return { ...build.finish({ generatedAt }), tiles };
 }
 
 /** True when a published index was built from exactly these inputs. */
-export function indexIsFresh(index, site, { sources, radiusKm = DEFAULT_RADIUS_KM, maxDistanceKm = DEFAULT_MAX_DISTANCE_KM }) {
+export function indexIsFresh(index, site, { sources, radiusKm = DEFAULT_RADIUS_KM, area, maxDistanceKm = DEFAULT_MAX_DISTANCE_KM }) {
   if (!index || index.schemaVersion !== SCHEMA_VERSION) return false;
   const i = index.inputs ?? {};
   return (
     i.latitude === site.latitude &&
     i.longitude === site.longitude &&
-    i.radiusKm === radiusKm &&
+    (area ? JSON.stringify(i.area) === JSON.stringify(area) : i.area === undefined && i.radiusKm === radiusKm) &&
     i.maxDistanceKm === maxDistanceKm &&
     i.algorithmVersion === ALGORITHM_VERSION &&
     (!sources || Object.entries(sources).every(([k, v]) => i.sources?.[k] === v.id))

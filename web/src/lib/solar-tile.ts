@@ -8,12 +8,21 @@
 import { ALBEDO, SHADOW_EDGE_DEG, azimuthWeights, litFraction, onSurface, type Sky } from "./irradiance.ts";
 import type { ReliefMeta } from "./relief.ts";
 
+export interface SolarArea {
+  name: string;
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
 export interface SolarIndex {
   schemaVersion: 1;
   slug: string;
   generatedAt: string;
   generation: string;
-  inputs: { latitude: number; longitude: number; radiusKm: number; maxDistanceKm: number };
+  /** The map covers `radiusKm` around the launch, or the launch's own `area` (a whole range, say). */
+  inputs: { latitude: number; longitude: number; radiusKm?: number; area?: SolarArea; maxDistanceKm: number };
   sources: Record<string, { id: string; name: string; resolutionM: number; licence: string; url: string }>;
   bounds: { south: number; west: number; north: number; east: number };
   referenceElevationM: number;

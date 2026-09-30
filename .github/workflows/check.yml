@@ -66,9 +66,10 @@ jobs:
       # Reads the real USGS elevation tiles for a small square around each
       # launch and builds its sunlight tiles, without publishing. Its notice
       # annotation shows the launch's measured slope, facing and horizons.
+      # Launches with a whole range as their area get the small square too.
       - name: Sunlight terrain live read (no publish)
         continue-on-error: true
-        run: scripts/run-annotated.sh "sunlight terrain smoke" pnpm run solar --output solar-smoke --radius-km 2 --max-distance-km 20
+        run: scripts/run-annotated.sh "sunlight terrain smoke" pnpm run solar --output solar-smoke --radius-km 2 --max-distance-km 20 --ignore-areas
 
   web:
     runs-on: ubuntu-latest

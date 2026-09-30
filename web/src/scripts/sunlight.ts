@@ -14,7 +14,7 @@ import { clearSky, withClouds } from "../lib/irradiance.ts";
 import { compassPoint, type Launch } from "../lib/launches.ts";
 import { DATA_BASE } from "../lib/site.ts";
 import { RAMP, fetchTile, pointIrradiance, pointParts, pointTerrain, rampLut, renderTile, type Frame, type PointTerrain, type SolarIndex, type SolarTile } from "../lib/solar-tile.ts";
-import { fetchRelief } from "../lib/relief.ts";
+import { fetchRelief, metresPerPixel } from "../lib/relief.ts";
 import { SunCurve } from "../lib/sun-curve.ts";
 import { sunPosition, sunriseSunset, sunVector } from "../lib/sun.ts";
 import { baseMap, markerStyle } from "./map.ts";
@@ -164,7 +164,11 @@ export class Sunlight {
       threeButton.title = "The 3D terrain for this launch is not published yet.";
     }
     const surface = this.index.sources.surface;
-    $("sun-terrain").textContent = `Terrain: ${surface?.name ?? "elevation model"}, ${surface?.resolutionM ?? "?"} m`;
+    const { area, radiusKm } = this.index.inputs;
+    const covers = area ? `the ${area.name}` : `${radiusKm ?? 15} km around the launch`;
+    $("sun-terrain").textContent = `The map covers ${covers}. Terrain: ${surface?.name ?? "elevation model"}, ${surface?.resolutionM ?? "?"} m`;
+    const relief = this.index.relief;
+    if (relief) $("sun-relief-spacing").textContent = `~${Math.round(metresPerPixel(this.launch.latitude, relief.zoom) / 5) * 5} m`;
     // The launch's own curve decides the starting time (now, or the day's peak).
     await this.selectPoint(L.latLng(this.launch.latitude, this.launch.longitude), true);
     if (this.dateKey) this.rebuildFrames(true);
@@ -173,8 +177,10 @@ export class Sunlight {
   private mountMap(index: SolarIndex) {
     const b = index.bounds;
     const bounds = L.latLngBounds([b.south, b.west], [b.north, b.east]);
+    // A launch with a whole range as its area can zoom out until the range fits a phone-wide map.
+    const fitZoom = Math.floor(Math.log2((360 * 300) / (256 * (b.east - b.west))));
     const map = baseMap($("sun-map"), {
-      minZoom: index.tiles.minZoom,
+      minZoom: index.inputs.area ? Math.max(9, Math.min(index.tiles.minZoom, fitZoom)) : index.tiles.minZoom,
       maxZoom: 16,
       maxBounds: bounds.pad(0.2),
       maxBoundsViscosity: 0.8,

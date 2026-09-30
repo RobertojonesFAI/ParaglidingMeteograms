@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
 import {
-  AZIMUTHS_DEG, HORIZON_BORDER, HORIZON_CELLS, HORIZON_STEP_DEG, MAX_ZOOM, MIN_ZOOM, RELIEF_VERSION, RELIEF_ZOOM, TILE_BYTES, TILE_SIZE,
-  buildRelief, buildSolarTerrain, decodeRelief, deltaDecode, deltaEncode, domainFor, gridFromFunction, halveLevel, indexIsFresh, latToY, lonToX,
-  reliefIsFresh,
+  AZIMUTHS_DEG, BLOCK_PX, HORIZON_BORDER, HORIZON_CELLS, HORIZON_STEP_DEG, MAX_ZOOM, MIN_ZOOM, RELIEF_VERSION, RELIEF_ZOOM, TILE_BYTES, TILE_SIZE,
+  blocksOf, buildRelief, buildSolarTerrain, decodeRelief, deltaDecode, deltaEncode, domainFor, domainForBounds, gridFromFunction, halveLevel, indexIsFresh,
+  latToY, lonToX, reliefIsFresh, reliefZoomFor, startSolarTerrain,
   metresPerDegree, metresPerPixel, rayDistances, sampleGrid, skyViewFactor, surfaceLevel, traceHorizons, xToLon, yToLat,
 } from "./solar.mjs";
 import { usgsUrl } from "../solar.mjs";
@@ -215,6 +215,87 @@ test("the relief covers the square corner to corner and decodes to the elevation
   assert.ok(decoded.some((v) => v < -300));
 });
 
+test("blocks cover a large area exactly, and no tile of any zoom spans two blocks", () => {
+  assert.equal(BLOCK_PX % (TILE_SIZE * 2 ** (MAX_ZOOM - MIN_ZOOM)), 0);
+  const domain = domainForBounds({ south: 43.58, west: -114.35, north: 44.6, east: -113.05 });
+  const blocks = blocksOf(domain);
+  assert.ok(blocks.length > 9);
+  let area = 0;
+  for (const b of blocks) {
+    assert.ok(b.x0 >= domain.x0 && b.x1 <= domain.x1 && b.y0 >= domain.y0 && b.y1 <= domain.y1);
+    for (const [edge, domainEdge] of [[b.x0, domain.x0], [b.x1, domain.x1], [b.y0, domain.y0], [b.y1, domain.y1]]) {
+      assert.ok(edge === domainEdge || edge % BLOCK_PX === 0, "a block edge is the domain's or on the block grid");
+    }
+    area += (b.x1 - b.x0) * (b.y1 - b.y0);
+  }
+  assert.equal(area, (domain.x1 - domain.x0) * (domain.y1 - domain.y0));
+});
+
+/** A small area around the corner where four blocks meet, near the reference point. */
+function cornerArea(halfKm) {
+  const X = Math.round(lonToX(LON, MAX_ZOOM) / BLOCK_PX) * BLOCK_PX;
+  const Y = Math.round(latToY(LAT, MAX_ZOOM) / BLOCK_PX) * BLOCK_PX;
+  const lat = yToLat(Y, MAX_ZOOM);
+  const lon = xToLon(X, MAX_ZOOM);
+  const k = metresPerDegree(lat);
+  return {
+    site: { slug: "corner", latitude: lat + 0.0003, longitude: lon + 0.0004 },
+    area: { name: "Corner", south: lat - (halfKm * 1000) / k.lat, west: lon - (halfKm * 1000) / k.lon, north: lat + (halfKm * 1000) / k.lat, east: lon + (halfKm * 1000) / k.lon },
+  };
+}
+
+test("an area built block by block gets exactly the tiles and relief it gets in one go", () => {
+  const { site, area } = cornerArea(1.5);
+  const elevation = (lat, lon) => 1500 + 400 * Math.sin((lat - LAT) * 900) * Math.cos((lon - LON) * 700);
+  const b = domainForBounds(area).bounds;
+  const pad = 2600;
+  const box = (p, res) => ({ south: b.south - p / m.lat, north: b.north + p / m.lat, west: b.west - p / m.lon, east: b.east + p / m.lon, dLon: res, dLat: res });
+  const fine = gridFromFunction(elevation, box(300, 1 / 10800));
+  const coarse = gridFromFunction(elevation, box(pad, 1 / 3600));
+  const options = { coarse, sources: { surface: { id: "f" }, horizon: { id: "c" } }, area, maxDistanceKm: 2 };
+
+  const byBlocks = buildSolarTerrain(site, { fine, ...options, generatedAt: "t" });
+  assert.equal(startSolarTerrain(site, options).blocks.length, 4);
+  const whole = startSolarTerrain(site, options);
+  const tiles = whole.addBlock(whole.domain, fine); // the whole domain as one block: the one-go build
+  whole.blocks.splice(0, whole.blocks.length, whole.domain);
+  const oneGo = { ...whole.finish({ generatedAt: "t" }), tiles };
+
+  const key = (t) => `${t.z}/${t.x}/${t.y}`;
+  const sorted = (list) => [...list].sort((p, q) => key(p).localeCompare(key(q)));
+  assert.deepEqual(sorted(byBlocks.tiles).map(key), sorted(oneGo.tiles).map(key));
+  sorted(byBlocks.tiles).forEach((t, i) => assert.ok(t.body.equals(sorted(oneGo.tiles)[i].body), `tile ${key(t)}`));
+  assert.ok(byBlocks.relief.body.equals(oneGo.relief.body));
+  assert.deepEqual(byBlocks.index, oneGo.index);
+});
+
+test("a launch's own area replaces the square around it", () => {
+  const { site, area } = cornerArea(1.5);
+  const elevation = (lat, lon) => 1500 + 0.2 * (lat - LAT) * m.lat;
+  const b = domainForBounds(area).bounds;
+  const box = (p, res) => ({ south: b.south - p / m.lat, north: b.north + p / m.lat, west: b.west - p / m.lon, east: b.east + p / m.lon, dLon: res, dLat: res });
+  const fine = gridFromFunction(elevation, box(300, 1 / 10800));
+  const coarse = gridFromFunction(elevation, box(2600, 1 / 3600));
+  const sources = { surface: { id: "f" }, horizon: { id: "c" } };
+  const { index } = buildSolarTerrain(site, { fine, coarse, sources, area, maxDistanceKm: 2 });
+  assert.deepEqual(index.inputs.area, area);
+  assert.equal(index.inputs.radiusKm, undefined);
+  assert.ok(index.bounds.south <= area.south && index.bounds.north >= area.north && index.bounds.west <= area.west && index.bounds.east >= area.east);
+
+  assert.ok(indexIsFresh(index, site, { area, maxDistanceKm: 2 }));
+  assert.ok(!indexIsFresh(index, site, { area: { ...area, north: area.north + 0.01 }, maxDistanceKm: 2 }));
+  assert.ok(!indexIsFresh(index, site, { maxDistanceKm: 2 }), "dropping the area rebuilds the square");
+  assert.throws(() => startSolarTerrain({ ...site, latitude: area.north + 0.05 }, { coarse, sources, area }), /outside its sunlight area/);
+});
+
+test("the relief drops to a coarser zoom only for a large area", () => {
+  assert.equal(reliefZoomFor(domainFor(LAT, LON, 15)), RELIEF_ZOOM);
+  const range = domainForBounds({ south: 43.58, west: -114.35, north: 44.6, east: -113.05 });
+  const z = reliefZoomFor(range);
+  assert.equal(z, RELIEF_ZOOM - 1);
+  assert.ok(Math.max(range.x1 - range.x0, range.y1 - range.y0) / 2 ** (MAX_ZOOM - z) < 1200);
+});
+
 test("grid sampling is bilinear and refuses points outside the grid", () => {
   const grid = gridFromFunction((lat, lon) => lat * 100 + lon, { south: 43, north: 43.01, west: -116, east: -115.99, dLon: 0.001, dLat: 0.001 });
   assert.ok(Math.abs(sampleGrid(grid, 43.0052, -115.9973) - (4300.52 - 115.9973)) < 1e-3);
@@ -251,12 +332,14 @@ test("reads both elevation models across USGS tile edges, and falls back to GLO-
       },
     };
   };
-  const site = { slug: "cervidae-peak", latitude: LAT, longitude: LON };
-  const terrain = await readTerrain(site, { radiusKm: 1, maxDistanceKm: 20, open });
+  const domain = domainFor(LAT, LON, 1);
+  const [block] = blocksOf(domain);
+  const terrain = await readTerrain(domain, { slug: "cervidae-peak", maxDistanceKm: 20, open });
   assert.equal(terrain.sources.surface.id, "usgs-3dep-13");
   assert.equal(terrain.sources.horizon.id, "usgs-3dep-1");
   assert.ok(opened.some((u) => u.includes("n44w117")), "the coarse window crosses 116°W");
-  for (const grid of [terrain.fine, terrain.coarse]) {
+  const fine = await terrain.readFine(block);
+  for (const grid of [fine, terrain.coarse]) {
     for (const [lat, lon] of [[LAT, LON], [LAT + 0.004, LON - 0.006]]) {
       assert.ok(Math.abs(sampleGrid(grid, lat, lon) - elevation(lat, lon)) < 0.05);
     }
@@ -280,8 +363,8 @@ test("reads both elevation models across USGS tile edges, and falls back to GLO-
       },
     };
   };
-  const fallback = await readTerrain(site, { radiusKm: 1, maxDistanceKm: 5, open: glo, warn: (m) => warnings.push(m) });
+  const fallback = await readTerrain(domain, { slug: "cervidae-peak", maxDistanceKm: 5, open: glo, warn: (m) => warnings.push(m) });
   assert.equal(fallback.sources.surface.id, "copernicus-glo30");
   assert.match(warnings[0], /^WARN cervidae-peak: USGS 3DEP unavailable/);
-  assert.ok(Math.abs(sampleGrid(fallback.fine, LAT, LON) - elevation(LAT, LON)) < 0.05);
+  assert.ok(Math.abs(sampleGrid(await fallback.readFine(block), LAT, LON) - elevation(LAT, LON)) < 0.05);
 });

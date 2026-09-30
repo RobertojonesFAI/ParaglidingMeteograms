@@ -51,6 +51,9 @@ something new, and records each run in `status/refresh.json`.
 | `cervidae-peak` | Cervidae Peak | 43.62332 | -115.98076 | America/Boise |
 | `king-mountain` | King Mountain | 43.76382 | -113.29149 | America/Boise |
 
+King Mountain's sunlight map covers the whole Lost River Range
+([`sunlight-areas.json`](forecasts/sunlight-areas.json)); Cervidae's covers 15 km around it.
+
 ## Models
 
 | Slug | Provider | Grid | Horizon | Use |
@@ -146,7 +149,7 @@ Forecast's own balloon table is used.
 ## Sunlight map
 
 Each launch page has a map of the sunlight (W/m²) reaching the ground within 15 km of the
-launch, with a slider from sunrise to sunset in 15-minute steps, a play button, and the day's
+launch (or across a whole range, see below), with a slider from sunrise to sunset in 15-minute steps, a play button, and the day's
 curve for the launch or any spot the user taps. A **2D / 3D** switch shows the same colours
 draped over the terrain in 3D (three.js, loaded only when the 3D view is opened), with the sun
 placed in its direction, so the slopes turned toward the sun stand out; the relief is true scale,
@@ -167,8 +170,22 @@ The ground is prepared once per launch by [`forecasts/scripts/solar.mjs`](foreca
 
 Outside 3DEP's coverage the builder falls back to Copernicus GLO-30 for both. A launch takes
 about 2-3 minutes and ~65 MB of tiles (~450 tiles of 120-250 KB); tiles are only rebuilt when a
-launch is added or moved, or when `ALGORITHM_VERSION` in
+launch is added or moved, its area changes, or when `ALGORITHM_VERSION` in
 [`forecasts/scripts/lib/solar.mjs`](forecasts/scripts/lib/solar.mjs) changes.
+
+**A whole range instead of 15 km.** A launch flown cross-country can have its own area in
+[`forecasts/sunlight-areas.json`](forecasts/sunlight-areas.json), a box of latitudes and
+longitudes that must contain the launch (at most 160 km a side; `pnpm run check` validates it):
+
+```json
+"king-mountain": { "name": "Lost River Range", "south": 43.58, "west": -114.35, "north": 44.6, "east": -113.05 }
+```
+
+The builder works through a large area in blocks of ~28 km, so memory stays the same however big
+it is, and the tiles come out exactly as if it had been built in one go. The Lost River Range
+(104 x 114 km) is about 12 times the default square: ~22 minutes and ~700 MB of tiles (5,400), under 1 GB of memory; its 3D relief drops to a
+height every ~110 m so the 3D view stays light, and its 2D map can zoom out to the whole range.
+The pull-request check builds every launch's small square only (`--ignore-areas`).
 
 The browser does the rest for each 15-minute step: the sun's position
 ([NOAA solar calculator equations](https://gml.noaa.gov/grad/solcalc/calcdetails.html),

@@ -7,12 +7,15 @@
 //    HRRR/RRFS coverage (the contiguous US).
 // 3. When the website is present, every launch has an entry in
 //    web/src/data/launches.json and every entry there has a launch here.
+// 4. sunlight-areas.json, next to sites.json: each area belongs to a launch,
+//    contains it, and is not too large to build.
 //
 // Usage: node scripts/check-sites.mjs [path/to/sites.json]
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseSites } from "@azohra/meteo.forecast";
+import { areaErrors, areaSizeKm } from "./lib/sunlight-areas.mjs";
 
 const path = resolve(process.argv[2] ?? "sites.json");
 const text = readFileSync(path, "utf-8");
@@ -60,6 +63,10 @@ if (existsSync(detailsPath)) {
   }
 }
 
+const areasPath = resolve(dirname(path), "sunlight-areas.json");
+const areas = existsSync(areasPath) ? JSON.parse(readFileSync(areasPath, "utf-8")) : { schemaVersion: 1, areas: {} };
+for (const error of areaErrors(areas, sites)) errors.push(`sunlight-areas.json: ${error}`);
+
 if (errors.length > 0) {
   for (const error of errors) console.error(`✗ ${error}`);
   process.exit(1);
@@ -68,4 +75,9 @@ if (errors.length > 0) {
 console.log(`✓ ${path}: ${sites.length} valid launch(es)`);
 for (const site of sites) {
   console.log(`  - ${site.slug}  (${site.name})  ${site.latitude}, ${site.longitude}  ${site.timeZone}`);
+  const area = areas.areas?.[site.slug];
+  if (area) {
+    const size = areaSizeKm(area);
+    console.log(`      sunlight map: ${area.name}, ${Math.round(size.eastWest)} x ${Math.round(size.northSouth)} km`);
+  }
 }

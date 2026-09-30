@@ -125,18 +125,20 @@ export class Sunlight3D {
     north.position.set(0, extent / 40, -extent / 2 - extent / 30);
     this.scene.add(north);
 
-    const pinHeight = extent / 28;
-    const stem = new THREE.Mesh(new THREE.CylinderGeometry(extent / 900, extent / 900, pinHeight, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(ink) }));
+    // Markers keep the size they have on a ~32 km square, however large the area (a whole range).
+    const marker = Math.min(extent, 32_000);
+    const pinHeight = marker / 28;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(marker / 900, marker / 900, pinHeight, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(ink) }));
     stem.position.y = pinHeight / 2;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(extent / 160, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(ink) }));
+    const head = new THREE.Mesh(new THREE.SphereGeometry(marker / 160, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(ink) }));
     head.position.y = pinHeight;
-    const name = label(`${launch.name} launch`, ink, surface, extent / 70);
-    name.position.y = pinHeight + extent / 80;
+    const name = label(`${launch.name} launch`, ink, surface, marker / 70);
+    name.position.y = pinHeight + marker / 80;
     this.launchPin.add(stem, head, name);
     this.scene.add(this.launchPin);
 
-    this.selected = new THREE.Mesh(new THREE.SphereGeometry(extent / 180, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(ink) }));
-    const ring = new THREE.Mesh(new THREE.SphereGeometry(extent / 140, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(surface), side: THREE.BackSide }));
+    this.selected = new THREE.Mesh(new THREE.SphereGeometry(marker / 180, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(ink) }));
+    const ring = new THREE.Mesh(new THREE.SphereGeometry(marker / 140, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(surface), side: THREE.BackSide }));
     this.selected.add(ring);
     this.selected.visible = false;
     this.scene.add(this.selected);

@@ -4,14 +4,19 @@
 // tiles are missing or were built from different inputs. When only the relief
 // is missing or outdated, just the relief is built and added.
 //
+// Each launch gets the square of --radius-km around it, unless it has its own
+// area in sunlight-areas.json (a mountain range, say). A large area is built in
+// blocks of ~28 km, reading the fine elevation one block at a time.
+//
 // Elevation sources (read over HTTP, only the windows needed):
 //   surface   USGS 3DEP 1/3 arc-second (~10 m)
-//   horizons  USGS 3DEP 1 arc-second (~30 m), covering 20 km around the square
+//   horizons  USGS 3DEP 1 arc-second (~30 m), covering 20 km around the area
 // Outside 3DEP's coverage both fall back to Copernicus GLO-30 (30 m).
 //
 // Usage:
 //   node scripts/solar.mjs --sync                                   bucket mode (same variables as the engine)
-//   node scripts/solar.mjs --output out [--sites sites.json] [--slug cervidae-peak] [--radius-km 15]
+//   node scripts/solar.mjs --output out [--sites sites.json] [--areas sunlight-areas.json] [--slug cervidae-peak] [--radius-km 15]
+//   --ignore-areas   every launch gets the --radius-km square (the quick check on pull requests)
 
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -21,7 +26,8 @@ import { parseArgs } from "node:util";
 import { parseSites } from "@azohra/meteo.forecast";
 import { bucketFromEnv } from "./lib/bucket.mjs";
 import { mosaic, tilesAround } from "./lib/mosaic.mjs";
-import { DEFAULT_MAX_DISTANCE_KM, DEFAULT_RADIUS_KM, buildRelief, buildSolarTerrain, domainFor, expandBounds, indexIsFresh, reliefIsFresh } from "./lib/solar.mjs";
+import { DEFAULT_MAX_DISTANCE_KM, DEFAULT_RADIUS_KM, FINE_MARGIN_M, blocksOf, domainOf, encodeRelief, expandBounds, fillRelief, indexIsFresh, reliefFrame, reliefIsFresh, startSolarTerrain } from "./lib/solar.mjs";
+import { parseAreas } from "./lib/sunlight-areas.mjs";
 
 const engineDir = dirname(createRequire(import.meta.url).resolve("@azohra/meteo.forecast/package.json"));
 const T = await import(pathToFileURL(join(engineDir, "dist/terrain.js")).href);
@@ -89,20 +95,48 @@ export async function readGrid(source, bounds, { open = T.openCog, log = () => {
   return { values, width, height, west: c + col0 * a, north: f + row0 * e, dLon: a, dLat: -e };
 }
 
-/** Reads both elevation models for a launch, preferring 3DEP. */
-export async function readTerrain(site, { radiusKm, maxDistanceKm, open, log = () => {}, warn = () => {} }) {
-  const domain = domainFor(site.latitude, site.longitude, radiusKm);
-  const fineBounds = expandBounds(domain.bounds, 100);
+/**
+ * Opens both elevation models for a launch's domain, preferring 3DEP: reads
+ * the coarse one (the domain and the terrain that can shade it) and returns
+ * `readFine(block)` for the fine one, read one block at a time.
+ */
+export async function readTerrain(domain, { slug, maxDistanceKm, open, log = () => {}, warn = () => {} }) {
   const coarseBounds = expandBounds(domain.bounds, maxDistanceKm * 1000 + 500);
+  const firstBlock = blocksOf(domain)[0];
+  const opened = (fineSource, coarseSource, first, coarse) => ({
+    coarse,
+    sources: { surface: publicSource(fineSource), horizon: publicSource(coarseSource) },
+    // The first block was read to check the source; hand it out once instead of reading it again.
+    readFine: async (block) => {
+      if (first && block.x0 === firstBlock.x0 && block.y0 === firstBlock.y0) {
+        const grid = first;
+        first = null;
+        return grid;
+      }
+      return withRetries(() => readGrid(fineSource, expandBounds(block.bounds, FINE_MARGIN_M), { open, log }), { warn });
+    },
+  });
   try {
-    const fine = await readGrid(SOURCES.usgs13, fineBounds, { open, log });
+    const first = await readGrid(SOURCES.usgs13, expandBounds(firstBlock.bounds, FINE_MARGIN_M), { open, log });
     const coarse = await readGrid(SOURCES.usgs1, coarseBounds, { open, log });
-    return { fine, coarse, sources: { surface: publicSource(SOURCES.usgs13), horizon: publicSource(SOURCES.usgs1) } };
+    return opened(SOURCES.usgs13, SOURCES.usgs1, first, coarse);
   } catch (error) {
-    warn(`WARN ${site.slug}: USGS 3DEP unavailable (${error.message}); using Copernicus GLO-30 (30 m) instead`);
-    const fine = await readGrid(SOURCES.glo30, fineBounds, { open, log });
+    warn(`WARN ${slug}: USGS 3DEP unavailable (${error.message}); using Copernicus GLO-30 (30 m) instead`);
     const coarse = await readGrid(SOURCES.glo30, coarseBounds, { open, log });
-    return { fine, coarse, sources: { surface: publicSource(SOURCES.glo30), horizon: publicSource(SOURCES.glo30) } };
+    return opened(SOURCES.glo30, SOURCES.glo30, null, coarse);
+  }
+}
+
+/** Retries a network read a few times: a large area makes many of them, and a rare one fails. */
+async function withRetries(read, { attempts = 3, warn = () => {} } = {}) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await read();
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      warn(`  read failed (${error.message}); retrying (${attempt}/${attempts - 1})`);
+      await new Promise((resolve) => setTimeout(resolve, 5000 * attempt));
+    }
   }
 }
 
@@ -115,6 +149,8 @@ async function main() {
     options: {
       sync: { type: "boolean", default: false },
       sites: { type: "string", default: "sites.json" },
+      areas: { type: "string", default: "sunlight-areas.json" },
+      "ignore-areas": { type: "boolean", default: false },
       output: { type: "string" },
       slug: { type: "string" },
       force: { type: "boolean", default: false },
@@ -127,6 +163,7 @@ async function main() {
   const maxDistanceKm = Number(values["max-distance-km"]);
   const sites = parseSites(JSON.parse(readFileSync(values.sites, "utf8"))).filter((s) => !values.slug || s.slug === values.slug);
   if (sites.length === 0) throw new Error("no matching launches");
+  const areas = values["ignore-areas"] ? {} : parseAreas(JSON.parse(readFileSync(values.areas, "utf8")));
   const bucket = values.sync ? bucketFromEnv() : null;
   const log = (m) => console.log(m);
   const warn = (m) => console.warn(m);
@@ -134,11 +171,13 @@ async function main() {
 
   const immutable = { contentType: "application/octet-stream", cacheControl: "public, max-age=31536000, immutable" };
   for (const site of sites) {
+    const area = areas[site.slug];
+    const domain = domainOf(site, { radiusKm, area });
     const indexKey = `solar/${site.slug}/index.json`;
     if (bucket && !values.force) {
       const existing = await bucket.get(indexKey);
       const published = existing ? JSON.parse(existing.toString("utf8")) : null;
-      if (indexIsFresh(published, site, { radiusKm, maxDistanceKm })) {
+      if (indexIsFresh(published, site, { radiusKm, area, maxDistanceKm })) {
         if (reliefIsFresh(published)) {
           log(`${site.slug}: sunlight terrain is current (${published.generation})`);
           summary.push(`| ${site.name} | current | ${published.tiles.count} | – |`);
@@ -149,9 +188,11 @@ async function main() {
         const started = Date.now();
         const source = Object.values(SOURCES).find((s) => s.id === published.sources?.surface?.id) ?? SOURCES.usgs13;
         log(`${site.slug}: adding the 3D relief from ${source.name}`);
-        const domain = domainFor(site.latitude, site.longitude, radiusKm);
-        const fine = await readGrid(source, expandBounds(domain.bounds, 100), { log });
-        const relief = buildRelief(fine, domain, published.generation);
+        const frame = reliefFrame(domain);
+        for (const block of blocksOf(domain)) {
+          fillRelief(frame, await withRetries(() => readGrid(source, expandBounds(block.bounds, FINE_MARGIN_M), { log }), { warn }), block);
+        }
+        const relief = encodeRelief(frame, published.generation);
         await bucket.put(`solar/${site.slug}/${relief.meta.path}`, relief.body, immutable);
         await bucket.put(indexKey, JSON.stringify({ ...published, relief: relief.meta }), { cacheControl: "public, max-age=300" });
         const r = relief.meta;
@@ -162,31 +203,37 @@ async function main() {
     }
 
     const started = Date.now();
-    log(`${site.slug}: reading elevation`);
-    const terrain = await readTerrain(site, { radiusKm, maxDistanceKm, log, warn });
-    const { index, tiles, relief } = buildSolarTerrain(site, { ...terrain, radiusKm, maxDistanceKm, log });
+    log(`${site.slug}: reading elevation${area ? ` for ${area.name}` : ""}`);
+    const terrain = await readTerrain(domain, { slug: site.slug, maxDistanceKm, log, warn });
+    const build = startSolarTerrain(site, { coarse: terrain.coarse, sources: terrain.sources, radiusKm, area, maxDistanceKm, log });
+    const base = bucket ? null : join(values.output, "solar", site.slug);
+    let uploaded = 0;
+    for (const block of build.blocks) {
+      const tiles = build.addBlock(block, await terrain.readFine(block));
+      const path = (tile) => `${build.generation}/${tile.z}/${tile.x}/${tile.y}.bin.gz`;
+      if (bucket) {
+        await inBatches(tiles, 16, async (tile) => {
+          await bucket.put(`solar/${site.slug}/${path(tile)}`, tile.body, immutable);
+          uploaded += 1;
+          if (uploaded % 100 === 0) log(`  uploaded ${uploaded} tiles`);
+        });
+      } else {
+        for (const tile of tiles) {
+          mkdirSync(join(base, build.generation, String(tile.z), String(tile.x)), { recursive: true });
+          writeFileSync(join(base, path(tile)), tile.body);
+        }
+      }
+    }
+    const { index, relief } = build.finish();
     const l = index.launch;
     log(`${site.slug}: launch ${l.elevationM} m, slope ${l.slopeDeg}° facing ${l.aspectDeg}°, sky view ${l.skyViewFactor}; horizon E ${l.horizonDeg[4]}° S ${l.horizonDeg[9]}° W ${l.horizonDeg[13]}°`);
-    console.log(`::notice title=${site.slug} sunlight terrain::launch ${l.elevationM} m, slope ${l.slopeDeg} deg facing ${l.aspectDeg} deg, sky view ${l.skyViewFactor}, horizons (every 20 deg from N) ${l.horizonDeg.join(" ")}; ${index.tiles.count} tiles, ${(index.tiles.bytes / 1e6).toFixed(1)} MB; relief ${index.relief.width} x ${index.relief.height}, ${index.relief.minM}–${index.relief.maxM} m`);
+    console.log(`::notice title=${site.slug} sunlight terrain::${area ? `${area.name}; ` : ""}launch ${l.elevationM} m, slope ${l.slopeDeg} deg facing ${l.aspectDeg} deg, sky view ${l.skyViewFactor}, horizons (every 20 deg from N) ${l.horizonDeg.join(" ")}; ${index.tiles.count} tiles, ${(index.tiles.bytes / 1e6).toFixed(1)} MB; relief ${index.relief.width} x ${index.relief.height}, ${index.relief.minM}–${index.relief.maxM} m`);
 
     if (bucket) {
-      let done = 0;
-      await inBatches(tiles, 16, async (tile) => {
-        const key = `solar/${site.slug}/${index.tiles.path.replace("{z}", tile.z).replace("{x}", tile.x).replace("{y}", tile.y)}`;
-        await bucket.put(key, tile.body, immutable);
-        done += 1;
-        if (done % 100 === 0) log(`  uploaded ${done}/${tiles.length}`);
-      });
       await bucket.put(`solar/${site.slug}/${index.relief.path}`, relief.body, immutable);
       // The index goes last: readers only find tiles that are already there.
       await bucket.put(indexKey, JSON.stringify(index), { cacheControl: "public, max-age=300" });
     } else {
-      const base = join(values.output, "solar", site.slug);
-      for (const tile of tiles) {
-        const dir = join(base, index.tiles.path.split("/")[0], String(tile.z), String(tile.x));
-        mkdirSync(dir, { recursive: true });
-        writeFileSync(join(dir, `${tile.y}.bin.gz`), tile.body);
-      }
       writeFileSync(join(base, index.relief.path), relief.body);
       writeFileSync(join(base, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
     }
