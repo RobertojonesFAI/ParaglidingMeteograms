@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Builds one model for every launch in the published sites.json, then
-# publishes the result to the dataset bucket.
+# Builds one model for the launches inside its grid, then publishes the result
+# to the dataset bucket.
+#
+# The launches come from the published sites.json, filtered by
+# scripts/model-sites.mjs: the engine fails a whole build when one launch is
+# outside the model's grid (HRRR has no Mexico), so each model only sees the
+# launches it covers. A model that covers none is skipped.
 #
 # Builds are idempotent: if the provider has no complete new run, or the
 # published run is already current, nothing is written and publish reports
@@ -14,9 +19,19 @@ set -uo pipefail
 
 model="${1:?usage: scripts/build-model.sh <model-slug>}"
 here="$(dirname "$0")"
-status=0
+sites="$(mktemp -d)/sites.json"
 
-"$here/run-annotated.sh" "$model build" pnpm exec meteo forecast build --model "$model" --sites dataset --output data || status=1
+if ! count="$(node "$here/model-sites.mjs" --model "$model" --output "$sites")"; then
+  echo "::error title=$model sites::could not read the published sites.json"
+  exit 1
+fi
+if [ "$count" = "0" ]; then
+  echo "$model covers none of the launches; nothing to build."
+  exit 0
+fi
+
+status=0
+"$here/run-annotated.sh" "$model build" pnpm exec meteo forecast build --model "$model" --sites "$sites" --output data || status=1
 "$here/run-annotated.sh" "$model publish" pnpm exec meteo forecast publish --model "$model" --data data || status=1
 
 exit "$status"

@@ -11,6 +11,17 @@ test("Cervidae uses the Boise balloon; far-away launches get none", () => {
   assert.equal(nearestStation({ latitude: 46.5, longitude: 7.9 }), null);
 });
 
+test("Valle de Bravo uses the Mexico City balloon, flown by Mexico's weather service", () => {
+  const torre = { slug: "la-torre", name: "La Torre", latitude: 19.18436, longitude: -100.11303 };
+  const s = nearestStation(torre);
+  assert.equal(s.id, "MMMX");
+  assert.ok(s.distanceKm > 100 && s.distanceKm < 120, `${s.distanceKm} km`);
+  const doc = buildSiteDocument({ site: torre, station: s, soundings: [] });
+  assert.equal(doc.station.agency, "SMN");
+  assert.match(doc.source, /^SMN radiosonde/);
+  assert.equal(buildSiteDocument({ site: CERVIDAE, station: nearestStation(CERVIDAE), soundings: [] }).station.agency, "NWS");
+});
+
 test("launch times are 00 and 12 UTC, newest first, and URLs follow IEM's format", () => {
   const times = recentLaunchTimes(Date.parse("2026-09-30T05:10:00Z"), 3).map((t) => new Date(t).toISOString());
   assert.deepEqual(times, ["2026-09-30T00:00:00.000Z", "2026-09-29T12:00:00.000Z", "2026-09-29T00:00:00.000Z"]);

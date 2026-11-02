@@ -9,7 +9,7 @@ const markers = launches.map((l) => ({ slug: l.slug, name: l.name, latitude: l.l
 
 <Base current="launches">
   <h1>Launches</h1>
-  <p class="muted" style="margin-top:6px">{SITE_TAGLINE}: model meteograms and the National Weather Service forecast for each launch.</p>
+  <p class="muted" style="margin-top:6px">{SITE_TAGLINE}: model meteograms for each launch, and the National Weather Service forecast for those in the US.</p>
 
   <div id="launch-map" class="map" style="margin-top:20px" role="region" aria-label="Map of launches"></div>
   <script type="application/json" id="launch-markers" set:html={JSON.stringify(markers)} />
