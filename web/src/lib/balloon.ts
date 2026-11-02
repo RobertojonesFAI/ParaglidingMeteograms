@@ -37,8 +37,7 @@ export interface RaobLevel {
 export interface RaobDocument {
   schemaVersion: 1;
   generatedAt: string;
-  /** `agency` flies the balloon (NWS, or e.g. SMN in Mexico); absent in documents from before it was added. */
-  station: { id: string; name: string; latitude: number; longitude: number; distanceKm: number; agency?: string; elevationM: number | null };
+  station: { id: string; name: string; latitude: number; longitude: number; distanceKm: number; elevationM: number | null };
   soundings: { validAt: string; levels: RaobLevel[] }[];
 }
 

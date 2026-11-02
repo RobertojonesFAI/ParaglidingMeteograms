@@ -342,15 +342,14 @@ write(nwsPaths.office("BOI"), {
     });
     return { validAt, levels: levels.filter((l) => l.pressureHpa >= 250) };
   };
-  for (const site of sites.sites) {
-    // Boise's sample flights, under the name of the launch's real nearest station.
-    const near = nearestStation(site) ?? { id: "KBOI", name: "Boise", latitude: 43.5677, longitude: -116.2109, distanceKm: 20 };
+  // Like the workflows, only launches with an upper-air station nearby get flights.
+  for (const site of sites.sites.filter((s) => nearestStation(s))) {
     write(`raob/sites/${site.slug}.json`, {
       schemaVersion: 1,
       source: "Sample: the NWS Soaring Forecast table with a synthetic dew point",
       generatedAt: new Date(now).toISOString(),
       site: { slug: site.slug, name: site.name },
-      station: { id: near.id, name: near.name, latitude: near.latitude, longitude: near.longitude, distanceKm: near.distanceKm, agency: near.agency ?? "NWS", elevationM: 874 },
+      station: { id: "KBOI", name: "Boise", latitude: 43.5677, longitude: -116.2109, distanceKm: 20, elevationM: 874 },
       soundings: [flight("2026-09-29T12:00:00Z", 0), flight("2026-09-29T00:00:00Z", 12)],
     });
   }

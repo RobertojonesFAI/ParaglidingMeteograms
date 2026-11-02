@@ -412,7 +412,8 @@ function renderBalloon(doc: RaobDocument | null, srgText: string | null) {
     return;
   }
   root.hidden = false;
-  // Outside the US the balloon is all the section holds, so it shows with it.
+  // Outside the US the balloon is all the section holds, so it shows with it
+  // (when an upper-air station is within reach).
   $("text-section").hidden = false;
   const station = doc?.station;
   $("balloon-title").textContent = `Weather balloon sounding · ${station?.name ?? "Boise"}${station ? ` (${station.id})` : ""}`;
@@ -443,7 +444,7 @@ function renderBalloon(doc: RaobDocument | null, srgText: string | null) {
       choice.kind === "balloon"
         ? `The balloon goes up from ${station ? `${station.name} airport, ${station.distanceKm} km from ${launch.name},` : "the airport"} at ${fmt(ft(elevation))} ft${
             choice.hasDewPoint ? "" : ". This is the Soaring Forecast's copy of the flight, without humidity"
-          }. ${choice.start.source === "forecast-high" ? "The dashed line is a thermal leaving the ground at the afternoon forecast high: where it meets the morning temperature line is the day's thermal top. " : ""}Balloon data: ${station?.agency === "SMN" ? "Servicio Meteorológico Nacional (Mexico)" : station?.agency ?? "NWS"}, via the Iowa Environmental Mesonet.`
+          }. ${choice.start.source === "forecast-high" ? "The dashed line is a thermal leaving the ground at the afternoon forecast high: where it meets the morning temperature line is the day's thermal top. " : ""}Balloon data: NWS, via the Iowa Environmental Mesonet.`
         : "A model hour from the NWS Soaring Forecast: temperature and wind only, so no clouds are shown.";
   };
 

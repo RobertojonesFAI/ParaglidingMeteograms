@@ -58,8 +58,9 @@ King Mountain's sunlight map covers the whole Lost River Range
 ([`sunlight-areas.json`](forecasts/sunlight-areas.json)); the others cover 15 km around them.
 
 El Peñón and La Torre (Valle de Bravo) are outside the regional models and the NWS: they get
-GFS, GDPS, GEPS and ECMWF, the Mexico City weather balloon (MMMX, flown by Mexico's Servicio
-Meteorológico Nacional) and a sunlight map on Copernicus GLO-30 terrain.
+GFS, GDPS, GEPS and ECMWF, and a sunlight map on Copernicus GLO-30 terrain. They have no weather
+balloon: the nearest one, Mexico City (MMMX), had no flights in the Iowa Environmental Mesonet's
+archive when they were added (November 2026), and a station without flights fails the NWS run.
 
 ## Models
 
@@ -143,9 +144,9 @@ credited wherever the data is shown (the site footer does).
 
 ## Weather-balloon soundings
 
-Weather balloons (radiosondes) go up at 00 and 12 UTC. [`forecasts/scripts/raob.mjs`](forecasts/scripts/raob.mjs)
+NWS weather balloons (radiosondes) go up at 00 and 12 UTC. [`forecasts/scripts/raob.mjs`](forecasts/scripts/raob.mjs)
 reads the two latest flights of each launch's nearest upper-air station (Boise, KBOI, for the
-Idaho launches; Mexico City, MMMX, for Valle de Bravo; any station within 300 km from the list in
+Idaho launches; any station within 300 km from the list in
 [`forecasts/scripts/lib/raob.mjs`](forecasts/scripts/lib/raob.mjs)) from the
 [Iowa Environmental Mesonet's archive](https://mesonet.agron.iastate.edu/archive/raob/)
 (`/json/raob.py?ts=YYYYmmddHH00&station=KBOI`) and publishes them as `raob/sites/<slug>.json`.
