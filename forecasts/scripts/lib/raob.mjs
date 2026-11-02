@@ -1,6 +1,7 @@
 // Weather-balloon (radiosonde) soundings for each launch's nearest upper-air
-// station, read from the Iowa Environmental Mesonet's archive of NWS
-// radiosonde data (https://mesonet.agron.iastate.edu/archive/raob/).
+// station, read from the Iowa Environmental Mesonet's radiosonde archive
+// (https://mesonet.agron.iastate.edu/archive/raob/): NWS stations in the US,
+// and a few others such as Mexico City (Servicio Meteorológico Nacional).
 //
 // Balloons go up at 00 and 12 UTC (6 PM and 6 AM in Boise summer time) and the
 // archive has them within an hour or two. Each run keeps the two latest.
@@ -10,6 +11,8 @@
 export const SCHEMA_VERSION = 1;
 export const API = "https://mesonet.agron.iastate.edu/json/raob.py";
 export const SOURCE = "NWS radiosonde observations via the Iowa Environmental Mesonet";
+/** The `source` line for a station's documents: its operator, via IEM. */
+export const sourceFor = (station) => (station.agency && station.agency !== "NWS" ? `${station.agency} radiosonde observations via the Iowa Environmental Mesonet` : SOURCE);
 export const USER_AGENT = "ParaglidingMeteograms/0.1 (+https://github.com/RobertojonesFAI/ParaglidingMeteograms)";
 const KT_TO_MPS = 0.514444;
 const HOUR = 3_600_000;
@@ -19,9 +22,9 @@ export const MAX_DISTANCE_KM = 300;
 export const TOP_HPA = 250;
 
 /**
- * Upper-air stations of the interior West. Positions are approximate and only
+ * Upper-air stations near the launches. Positions are approximate and only
  * pick the nearest station; the published document carries the balloon's own
- * surface height.
+ * surface height. `agency` is who flies the balloon (NWS when absent).
  */
 export const STATIONS = [
   { id: "KBOI", name: "Boise", latitude: 43.5677, longitude: -116.2109 },
@@ -33,6 +36,7 @@ export const STATIONS = [
   { id: "KTFX", name: "Great Falls", latitude: 47.46, longitude: -111.39 },
   { id: "KRIU", name: "Riverton", latitude: 43.06, longitude: -108.48 },
   { id: "KGJT", name: "Grand Junction", latitude: 39.12, longitude: -108.53 },
+  { id: "MMMX", name: "Mexico City", latitude: 19.43, longitude: -99.07, agency: "SMN" },
 ];
 
 export function distanceKm(a, b) {
@@ -199,7 +203,7 @@ export function mergeSoundings(sounding, previous = [], keep = 2) {
 export function buildSiteDocument({ site, station, soundings, now = Date.now() }) {
   return {
     schemaVersion: SCHEMA_VERSION,
-    source: SOURCE,
+    source: sourceFor(station),
     generatedAt: new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z"),
     site: { slug: site.slug, name: site.name },
     station: {
@@ -208,6 +212,7 @@ export function buildSiteDocument({ site, station, soundings, now = Date.now() }
       latitude: station.latitude,
       longitude: station.longitude,
       distanceKm: station.distanceKm,
+      agency: station.agency ?? "NWS",
       elevationM: soundings[0]?.levels[0]?.heightM ?? null,
     },
     soundings,

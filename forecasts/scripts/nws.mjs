@@ -1,5 +1,6 @@
-// Fetches the National Weather Service forecast for every launch and,
-// optionally, publishes it to the dataset bucket.
+// Fetches the National Weather Service forecast for every launch in the United
+// States (launches elsewhere are skipped) and, optionally, publishes it to the
+// dataset bucket.
 //
 //   nws/sites/<slug>.json   hourly grid forecast + text periods for one launch
 //   nws/offices/<id>.json   latest Area Forecast Discussion (and Soaring Forecast, if issued)
@@ -16,6 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { parseSites } from "@azohra/meteo.forecast";
 import { bucketFromEnv } from "./lib/bucket.mjs";
+import { nwsCovers } from "./lib/coverage.mjs";
 import {
   DEFAULT_USER_AGENT,
   buildManifest,
@@ -53,6 +55,10 @@ function write(key, document) {
 const siteEntries = [];
 const documents = [];
 for (const site of sites) {
+  if (!nwsCovers(site.latitude, site.longitude)) {
+    console.log(`– ${site.slug}: outside the United States, no NWS forecast`);
+    continue;
+  }
   try {
     const document = await fetchSiteDocument(site, getJson, { now, warn });
     write(paths.site(site.slug), document);

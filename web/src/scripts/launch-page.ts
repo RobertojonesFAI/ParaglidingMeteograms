@@ -45,6 +45,8 @@ interface NwsOfficeDocument {
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const launch = JSON.parse($("launch-config").textContent ?? "{}") as Launch;
 const tz = launch.timeZone;
+// The page hides the NWS sections for launches outside the US.
+const hasNws = !$("nws-section").hidden;
 const arc = windWindow(launch);
 let sample = false;
 
@@ -266,6 +268,7 @@ function renderMeteogram() {
 }
 
 function renderNws() {
+  if (!hasNws) return;
   const meta = $("nws-meta");
   const link = $("nws-link") as HTMLAnchorElement;
   if (!nws) {
@@ -409,6 +412,8 @@ function renderBalloon(doc: RaobDocument | null, srgText: string | null) {
     return;
   }
   root.hidden = false;
+  // Outside the US the balloon is all the section holds, so it shows with it.
+  $("text-section").hidden = false;
   const station = doc?.station;
   $("balloon-title").textContent = `Weather balloon sounding · ${station?.name ?? "Boise"}${station ? ` (${station.id})` : ""}`;
   const day = new Intl.DateTimeFormat("en-US", { weekday: "short", hour: "numeric", timeZone: tz });
@@ -438,7 +443,7 @@ function renderBalloon(doc: RaobDocument | null, srgText: string | null) {
       choice.kind === "balloon"
         ? `The balloon goes up from ${station ? `${station.name} airport, ${station.distanceKm} km from ${launch.name},` : "the airport"} at ${fmt(ft(elevation))} ft${
             choice.hasDewPoint ? "" : ". This is the Soaring Forecast's copy of the flight, without humidity"
-          }. ${choice.start.source === "forecast-high" ? "The dashed line is a thermal leaving the ground at the afternoon forecast high: where it meets the morning temperature line is the day's thermal top. " : ""}Balloon data: NWS, via the Iowa Environmental Mesonet.`
+          }. ${choice.start.source === "forecast-high" ? "The dashed line is a thermal leaving the ground at the afternoon forecast high: where it meets the morning temperature line is the day's thermal top. " : ""}Balloon data: ${station?.agency === "SMN" ? "Servicio Meteorológico Nacional (Mexico)" : station?.agency ?? "NWS"}, via the Iowa Environmental Mesonet.`
         : "A model hour from the NWS Soaring Forecast: temperature and wind only, so no clouds are shown.";
   };
 
@@ -501,6 +506,7 @@ function render() {
 }
 
 function renderText(office: NwsOfficeDocument | null) {
+  if (!hasNws) return;
   const list = $("nws-periods");
   list.replaceChildren();
   for (const period of nws?.periods ?? []) {
@@ -537,7 +543,7 @@ async function start() {
   const [modelsJson, contextJson, nwsDoc, ecmwfDoc] = await Promise.all([
     getJson<unknown>("models.json"),
     getJson<unknown>("site-context.json"),
-    getJson<NwsSiteDocument>(`nws/sites/${launch.slug}.json`),
+    hasNws ? getJson<NwsSiteDocument>(`nws/sites/${launch.slug}.json`) : null,
     getJson<EcmwfSiteDocument>(`ecmwf/sites/${launch.slug}.json`),
     ...MODEL_ORDER.map(loadManifest),
   ]);

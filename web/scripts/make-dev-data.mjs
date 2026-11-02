@@ -21,6 +21,8 @@ import {
   siteForecastSchema,
 } from "@azohra/meteo.briefing/contract";
 import { buildManifest, buildSiteDocument, paths as nwsPaths } from "../../forecasts/scripts/lib/nws.mjs";
+import { nwsCovers, sitesForModel } from "../../forecasts/scripts/lib/coverage.mjs";
+import { nearestStation } from "../../forecasts/scripts/lib/raob.mjs";
 import { buildSolarTerrain, domainFor, expandBounds, gridFromFunction, metresPerDegree } from "../../forecasts/scripts/lib/solar.mjs";
 import { ALOFT_FIELDS, SURFACE_FIELDS, buildManifest as buildEcmwfManifest, buildSiteDocument as buildEcmwfDocument, paths as ecmwfPaths } from "../../forecasts/scripts/lib/ecmwf.mjs";
 import { SCHEMA_VERSION as STATION_SCHEMA, SOURCE as STATION_SOURCE, dashboardUrl, parseWuCurrent, parseWuHistory } from "../src/lib/station.ts";
@@ -153,7 +155,9 @@ for (const [model, ref, step, count, build] of [
   ["gfs", gfsRef, 3, 56, profile],
   ["geps", gfsRef, 3, 56, ensembleProfile],
 ]) {
-  for (const site of sites.sites) write(`${model}/sites/${site.slug}.json`, build(model, site, ref, step, count), parseSiteForecastJson);
+  // Like the workflows, each model only gets the launches inside its grid.
+  const { covered } = sitesForModel(model, sites.sites);
+  for (const site of covered) write(`${model}/sites/${site.slug}.json`, build(model, site, ref, step, count), parseSiteForecastJson);
   const generatedAt = new Date(ref + 2 * HOUR).toISOString();
   write(
     `${model}/manifest.json`,
@@ -165,7 +169,7 @@ for (const [model, ref, step, count, build] of [
       firstForecastHour: step,
       lastForecastHour: step * count,
       forecastHours: count,
-      sites: sites.sites.map((s) => ({ slug: s.slug, name: s.name })),
+      sites: covered.map((s) => ({ slug: s.slug, name: s.name })),
       stats: { downloadBytes: 0, downloads: 0, durationMs: 0, retries: 0 },
     },
     parseForecastManifestJson,
@@ -263,7 +267,7 @@ function nwsGrid(site) {
 }
 
 const siteEntries = [];
-for (const site of sites.sites) {
+for (const site of sites.sites.filter((s) => nwsCovers(s.latitude, s.longitude))) {
   const point = { properties: { gridId: "BOI", gridX: 150, gridY: 86 } };
   const start = localMidnight(site.timeZone, now);
   const hourly = {
@@ -339,12 +343,14 @@ write(nwsPaths.office("BOI"), {
     return { validAt, levels: levels.filter((l) => l.pressureHpa >= 250) };
   };
   for (const site of sites.sites) {
+    // Boise's sample flights, under the name of the launch's real nearest station.
+    const near = nearestStation(site) ?? { id: "KBOI", name: "Boise", latitude: 43.5677, longitude: -116.2109, distanceKm: 20 };
     write(`raob/sites/${site.slug}.json`, {
       schemaVersion: 1,
       source: "Sample: the NWS Soaring Forecast table with a synthetic dew point",
       generatedAt: new Date(now).toISOString(),
       site: { slug: site.slug, name: site.name },
-      station: { id: "KBOI", name: "Boise", latitude: 43.5677, longitude: -116.2109, distanceKm: 20, elevationM: 874 },
+      station: { id: near.id, name: near.name, latitude: near.latitude, longitude: near.longitude, distanceKm: near.distanceKm, agency: near.agency ?? "NWS", elevationM: 874 },
       soundings: [flight("2026-09-29T12:00:00Z", 0), flight("2026-09-29T00:00:00Z", 12)],
     });
   }
