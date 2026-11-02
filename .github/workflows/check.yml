@@ -42,10 +42,14 @@ jobs:
         run: pnpm run check
       - name: Unit tests
         run: pnpm test
+      # Each model is built only for the launches inside its grid, as in
+      # scripts/build-model.sh.
       - name: Engine dry run
         run: |
           for model in hrrr-conus rrfs gfs hrdps-continental rdps gdps geps; do
-            pnpm exec meteo forecast build --model "$model" --sites ./sites.json --output data --dry-run
+            count="$(node scripts/model-sites.mjs --model "$model" --sites ./sites.json --output "model-sites/$model.json")"
+            if [ "$count" = "0" ]; then echo "$model covers none of the launches"; continue; fi
+            pnpm exec meteo forecast build --model "$model" --sites "model-sites/$model.json" --output data --dry-run
           done
       # Fetches the live NWS forecast for every launch without publishing it,
       # so a change in api.weather.gov's responses shows up here first. NWS

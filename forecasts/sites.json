@@ -14,6 +14,20 @@
       "latitude": 43.76382,
       "longitude": -113.29149,
       "timeZone": "America/Boise"
+    },
+    {
+      "slug": "el-penon",
+      "name": "El Peñón",
+      "latitude": 19.06224,
+      "longitude": -100.09016,
+      "timeZone": "America/Mexico_City"
+    },
+    {
+      "slug": "la-torre",
+      "name": "La Torre",
+      "latitude": 19.18436,
+      "longitude": -100.11303,
+      "timeZone": "America/Mexico_City"
     }
   ]
 }

@@ -4,6 +4,7 @@ import { launches } from "../../lib/catalog.ts";
 import { compassPoint, type Launch } from "../../lib/launches.ts";
 import stationsFile from "../../data/stations.json";
 import { dashboardUrl, type StationsFile } from "../../lib/station.ts";
+import { nwsCovers } from "../../../../forecasts/scripts/lib/coverage.mjs";
 
 export function getStaticPaths() {
   return launches.map((launch) => ({ params: { slug: launch.slug }, props: { launch } }));
@@ -11,6 +12,8 @@ export function getStaticPaths() {
 
 const { launch } = Astro.props as { launch: Launch };
 const facing = compassPoint(launch.facingDeg);
+// The National Weather Service only forecasts the US: elsewhere its sections are hidden.
+const hasNws = nwsCovers(launch.latitude, launch.longitude);
 const zoneName =
   new Intl.DateTimeFormat("en-US", { timeZone: launch.timeZone, timeZoneName: "long" })
     .formatToParts(new Date())
@@ -30,7 +33,7 @@ const station = stationEntry && (() => {
 })();
 ---
 
-<Base title={launch.name} description={`Soaring meteogram and National Weather Service forecast for ${launch.name}.`}>
+<Base title={launch.name} description={`Soaring meteogram${hasNws ? " and National Weather Service forecast" : ""} for ${launch.name}.`}>
   <script type="application/json" id="launch-config" set:html={JSON.stringify(launch)} />
 
   <p class="eyebrow"><a href="/">Launches</a>{launch.region && ` · ${launch.region}`}</p>
@@ -232,7 +235,7 @@ const station = stationEntry && (() => {
         <summary>How this is calculated</summary>
         <p class="muted">
           Darker orange means more sunlight reaching the ground, and more heating to set off thermals. For every spot the map
-          uses the slope and the direction the ground faces (from a 10 m elevation model), whether a ridge up to 20 km away
+          uses the slope and the direction the ground faces (from an elevation model), whether a ridge up to 20 km away
           hides the sun, and how much open sky the spot sees. The sun's position is computed for every 15 minutes from sunrise
           to sunset. <span id="sun-terrain"></span>.
         </p>
@@ -248,7 +251,7 @@ const station = stationEntry && (() => {
     </div>
   </section>
 
-  <section class="card" aria-labelledby="nws-title">
+  <section class="card" id="nws-section" aria-labelledby="nws-title" hidden={!hasNws}>
     <div class="card-head">
       <h2 id="nws-title">National Weather Service forecast</h2>
       <span class="card-sub"><span id="nws-meta"></span> · <a id="nws-link" hidden>Open on weather.gov</a></span>
@@ -277,12 +280,12 @@ const station = stationEntry && (() => {
     </details>
   </section>
 
-  <section class="card" aria-labelledby="text-title">
+  <section class="card" id="text-section" aria-labelledby="text-title" hidden={!hasNws}>
     <div class="card-head">
-      <h2 id="text-title">Forecast discussion</h2>
-      <span class="card-sub">National Weather Service text products</span>
+      <h2 id="text-title">{hasNws ? "Forecast discussion" : "Weather balloon"}</h2>
+      <span class="card-sub">{hasNws ? "National Weather Service text products" : "The latest flights from the nearest upper-air station"}</span>
     </div>
-    <ul class="periods" id="nws-periods"></ul>
+    <ul class="periods" id="nws-periods" hidden={!hasNws}></ul>
     <div class="balloon" id="balloon" hidden>
       <div class="card-head">
         <h3 id="balloon-title">Weather balloon sounding</h3>
@@ -302,7 +305,7 @@ const station = stationEntry && (() => {
       </div>
       <p class="muted balloon-note" id="balloon-note"></p>
     </div>
-    <div class="stack" id="nws-products" style="margin-top:18px"></div>
+    <div class="stack" id="nws-products" style="margin-top:18px" hidden={!hasNws}></div>
   </section>
 
   <script>

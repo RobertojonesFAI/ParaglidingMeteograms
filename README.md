@@ -1,6 +1,7 @@
 # ParaglidingMeteograms
 
-Soaring forecasts for paragliding launches, starting with Cervidae Peak near Boise, Idaho.
+Soaring forecasts for paragliding launches, starting with Cervidae Peak near Boise, Idaho, and
+now also Valle de Bravo, Mexico.
 
 For every launch, the pipeline samples high-resolution weather models and publishes an
 hour-by-hour meteogram: thermal strength (w\*), boundary-layer top, cloud base, usable-lift
@@ -50,9 +51,15 @@ something new, and records each run in `status/refresh.json`.
 | --- | --- | --- | --- | --- |
 | `cervidae-peak` | Cervidae Peak | 43.62332 | -115.98076 | America/Boise |
 | `king-mountain` | King Mountain | 43.76382 | -113.29149 | America/Boise |
+| `el-penon` | El Peñón | 19.06224 | -100.09016 | America/Mexico_City |
+| `la-torre` | La Torre | 19.18436 | -100.11303 | America/Mexico_City |
 
 King Mountain's sunlight map covers the whole Lost River Range
-([`sunlight-areas.json`](forecasts/sunlight-areas.json)); Cervidae's covers 15 km around it.
+([`sunlight-areas.json`](forecasts/sunlight-areas.json)); the others cover 15 km around them.
+
+El Peñón and La Torre (Valle de Bravo) are outside the regional models and the NWS: they get
+GFS, GDPS, GEPS and ECMWF, the Mexico City weather balloon (MMMX, flown by Mexico's Servicio
+Meteorológico Nacional) and a sunlight map on Copernicus GLO-30 terrain.
 
 ## Models
 
@@ -68,6 +75,13 @@ King Mountain's sunlight map covers the whole Lost River Range
 
 The site lists the models in this order and opens the first one whose run covers the day
 being viewed.
+
+Each model is built only for the launches inside its grid: the engine fails a whole build when
+one launch lies outside it. [`forecasts/scripts/lib/coverage.mjs`](forecasts/scripts/lib/coverage.mjs)
+decides which (HRRR's CONUS grid exactly for HRRR and RRFS; launches north of 30°N for HRDPS and
+RDPS, whose southern edge it does not model; every launch for the global models), and
+[`forecasts/scripts/model-sites.mjs`](forecasts/scripts/model-sites.mjs) writes the catalogue
+each build reads. `pnpm run check` lists the models each launch gets.
 
 Models deliberately not used:
 
@@ -103,8 +117,8 @@ directly:
 No API key is needed. NWS asks each client to identify itself; the requests send
 `ParaglidingMeteograms/0.1 (+https://github.com/RobertojonesFAI/ParaglidingMeteograms)` as the
 User-Agent, which the `NWS_USER_AGENT` environment variable can override (for example to add a
-contact email). NWS only covers the United States; a launch outside it is reported as failed in
-the NWS run and is still built by the models that cover it.
+contact email). NWS only covers the United States; the NWS run skips launches outside it, and
+their pages hide the NWS sections.
 
 Speeds are published in m/s, heights in metres and temperatures in °C, like the model
 documents; each document's `units` field describes every column.
@@ -129,9 +143,9 @@ credited wherever the data is shown (the site footer does).
 
 ## Weather-balloon soundings
 
-NWS weather balloons (radiosondes) go up at 00 and 12 UTC. [`forecasts/scripts/raob.mjs`](forecasts/scripts/raob.mjs)
+Weather balloons (radiosondes) go up at 00 and 12 UTC. [`forecasts/scripts/raob.mjs`](forecasts/scripts/raob.mjs)
 reads the two latest flights of each launch's nearest upper-air station (Boise, KBOI, for the
-Boise launches; any station within 300 km from the list in
+Idaho launches; Mexico City, MMMX, for Valle de Bravo; any station within 300 km from the list in
 [`forecasts/scripts/lib/raob.mjs`](forecasts/scripts/lib/raob.mjs)) from the
 [Iowa Environmental Mesonet's archive](https://mesonet.agron.iastate.edu/archive/raob/)
 (`/json/raob.py?ts=YYYYmmddHH00&station=KBOI`) and publishes them as `raob/sites/<slug>.json`.

@@ -39,6 +39,11 @@ import Base from "../layouts/Base.astro";
         on the chart is measured from terrain data, not taken from the model.
         <a href="https://meteo.azohra.com/docs/briefing/reading-a-meteogram/">Learn to read every mark on the chart</a>.
       </p>
+      <p style="margin-top:8px">
+        HRRR, RRFS, HRDPS and RDPS only cover the United States and Canada. Launches elsewhere, such as Valle de Bravo in
+        Mexico, get the global models (GFS, GDPS and the GEPS ensemble) and the ECMWF forecast. The model columns stop
+        around 14,000 ft, so on the strongest days there the thermal top can be cut at that height.
+      </p>
     </section>
 
     <section class="card">
@@ -54,12 +59,14 @@ import Base from "../layouts/Base.astro";
     <section class="card">
       <h2>Weather balloon</h2>
       <p style="margin-top:8px">
-        Twice a day the National Weather Service launches a weather balloon from Boise airport (6 AM and 6 PM in summer). The
-        forecast-discussion section draws the latest flights as a Skew-T. The morning flight is read the way the NWS Soaring
+        Twice a day (00 and 12 UTC) a weather balloon goes up from the upper-air station nearest the launch: Boise airport for
+        the Idaho launches, flown by the National Weather Service, and Mexico City airport for Valle de Bravo, flown by
+        Mexico's Servicio Meteorológico Nacional. The page draws the latest flights as a Skew-T. The morning flight is read the way the NWS Soaring
         Forecast is made: a thermal leaves the ground at the afternoon forecast high and rises until it is no warmer than the
         morning air, which gives the day's thermal top. The Soaring Forecast's own numbers (trigger temperature, lift, soaring
         index) are shown alongside, and its model hours can be viewed as Skew-Ts too. The site checks for a new Soaring Forecast
-        and a new balloon flight every 10 minutes, so each appears shortly after the NWS releases it. Balloon data: NWS, via the
+        and a new balloon flight every 10 minutes, so each appears shortly after it is released. The Soaring Forecast exists only
+        in the US. Balloon data: NWS and SMN, via the
         <a href="https://mesonet.agron.iastate.edu/archive/raob/">Iowa Environmental Mesonet</a>.
       </p>
     </section>
@@ -74,7 +81,7 @@ import Base from "../layouts/Base.astro";
         the sun in its place in the sky: the faces turned toward it are the ones heating fastest.
       </p>
       <p style="margin-top:8px">
-        The terrain comes from the USGS 3D Elevation Program (10 m). The sky is a clear sky dimmed by the cloud cover of the
+        The terrain comes from the USGS 3D Elevation Program (10 m), or outside the US from the Copernicus DEM GLO-30 (30 m). The sky is a clear sky dimmed by the cloud cover of the
         model you selected, at the launch, so it shows where the sun is, not where individual clouds are.
       </p>
     </section>
@@ -83,7 +90,8 @@ import Base from "../layouts/Base.astro";
       <h2>National Weather Service forecast</h2>
       <p style="margin-top:8px">
         The official forecast issued by the National Weather Service for the launch's 2.5 km grid cell — the same data as the
-        hourly graph on <a href="https://www.weather.gov/">weather.gov</a>. It is refreshed every hour.
+        hourly graph on <a href="https://www.weather.gov/">weather.gov</a>. It is refreshed every hour. It exists only for
+        launches in the United States.
       </p>
       <ul style="margin-top:8px">
         <li><strong>Mixing height</strong>: how deep the air near the ground is being stirred; a rough ceiling for thermals.</li>
@@ -97,7 +105,7 @@ import Base from "../layouts/Base.astro";
       <p style="margin-top:8px">
         The European Centre for Medium-Range Weather Forecasts' IFS model, often the best global model, at 9 km: surface wind
         and gusts at the launch, winds at about 5,000 and 10,000 ft, how deep the boundary layer mixes, and low, mid and high
-        cloud, hour by hour for a week. It is a second opinion next to the National Weather Service forecast. Its open data has
+        cloud, hour by hour for a week. It is a second opinion next to the models above (and, in the US, the National Weather Service forecast). Its open data has
         no surface heat flux, so it cannot drive the soaring meteogram. Data © ECMWF (CC BY 4.0), served by
         <a href="https://open-meteo.com/">Open-Meteo.com</a>.
       </p>

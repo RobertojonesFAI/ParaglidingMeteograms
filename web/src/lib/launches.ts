@@ -61,7 +61,7 @@ export const DEFAULT_DETAILS: LaunchDetails = {
   notes: "",
 };
 
-/** US time zones offered in the admin form (NWS and HRRR cover the US). */
+/** Time zones offered in the admin form: the US ones, and those of launches elsewhere. */
 export const TIME_ZONES = [
   "America/Boise",
   "America/Denver",
@@ -71,6 +71,7 @@ export const TIME_ZONES = [
   "America/New_York",
   "America/Anchorage",
   "Pacific/Honolulu",
+  "America/Mexico_City",
 ];
 
 export const COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
