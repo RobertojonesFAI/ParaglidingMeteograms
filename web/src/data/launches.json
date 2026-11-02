@@ -26,10 +26,10 @@
       "windMaxMph": 15,
       "gustMaxMph": 20,
       "region": "Valle de Bravo, México",
-      "notes": ""
+      "notes": "Live wind at the launch: Holfuy station 609 (holfuy.com/en/weather/609)."
     },
     "la-torre": {
-      "facingDeg": 270,
+      "facingDeg": 160,
       "windArcHalfWidthDeg": 45,
       "windMinMph": 5,
       "windMaxMph": 15,
