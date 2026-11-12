@@ -1,5 +1,9 @@
 node_modules/
 forecasts/data/
+thermals/data/hrrr_cache/
+thermals/data/forecast_predictions.json
+__pycache__/
+*.pyc
 .DS_Store
 .env
 .env.*

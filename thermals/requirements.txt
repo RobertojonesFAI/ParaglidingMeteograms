@@ -1,0 +1,13 @@
+herbie-data>=2024.5.0
+cfgrib>=0.9.10
+eccodes>=1.6.0
+xarray>=2023.6.0
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+pvlib>=0.10.0
+pytz>=2023.3
+lightgbm>=4.0.0
+xgboost>=2.0.0
+boto3>=1.28.0
+
