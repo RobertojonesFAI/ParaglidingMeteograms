@@ -14,6 +14,12 @@ const { launch } = Astro.props as { launch: Launch };
 const facing = compassPoint(launch.facingDeg);
 // The National Weather Service only forecasts the US: elsewhere its sections are hidden.
 const hasNws = nwsCovers(launch.latitude, launch.longitude);
+// Boise thermal prediction domain covers Boise Foothills, Lucky Peak, Cervidae Peak & Bogus Basin.
+const hasBoiseThermals =
+  launch.latitude >= 43.45 &&
+  launch.latitude <= 43.85 &&
+  launch.longitude >= -116.38 &&
+  launch.longitude <= -115.88;
 const zoneName =
   new Intl.DateTimeFormat("en-US", { timeZone: launch.timeZone, timeZoneName: "long" })
     .formatToParts(new Date())
@@ -43,7 +49,19 @@ const station = stationEntry && (() => {
     <li>Launch range <strong>{launch.windMinMph}–{launch.windMaxMph} mph</strong>, gusts under {launch.gustMaxMph}</li>
     <li id="launch-elevation-item" hidden>Launch elevation <strong id="launch-elevation"></strong></li>
     <li>Times in {zoneName}</li>
+    {hasBoiseThermals && (
+      <li>
+        <a href="/thermals?spot=cervidae">Boise Thermal Prediction Map →</a>
+      </li>
+    )}
   </ul>
+  {hasBoiseThermals && (
+    <div class="form-actions" style="margin-top:12px">
+      <a class="button" href="/thermals?spot=cervidae" id="btn-ml-thermal-intelligence">
+        ML thermal intelligence →
+      </a>
+    </div>
+  )}
   {launch.notes && <p class="notice" style="margin-top:14px">{launch.notes}</p>}
 
   <p id="sample-notice" class="notice sample" style="margin-top:14px" hidden>
@@ -250,6 +268,24 @@ const station = stationEntry && (() => {
       </details>
     </div>
   </section>
+
+  {hasBoiseThermals && (
+    <section class="card" id="thermal-prediction-section" aria-labelledby="thermal-prediction-title">
+      <div class="card-head">
+        <h2 id="thermal-prediction-title">Thermal prediction map (Boise domain)</h2>
+        <span class="card-sub">Machine-learning 12-hour forecast · Ensemble Consensus, LightGBM &amp; XGBoost</span>
+      </div>
+      <p class="muted">
+        Explore hourly thermal generation probabilities across 690 terrain grid cells (~1.6 km resolution) covering
+        Cervidae Peak, Lucky Peak, the Boise Foothills, and Bogus Basin. Combines NOAA HRRR atmospheric soundings with
+        DEM slope, aspect, albedo, and solar incidence.
+      </p>
+      <div class="form-actions" style="margin-top:14px">
+        <a class="button" href="/thermals?spot=cervidae">Open Thermal Map at {launch.name}</a>
+        <a class="button secondary" href="/thermals">Full Boise Regional Overview</a>
+      </div>
+    </section>
+  )}
 
   <section class="card" id="nws-section" aria-labelledby="nws-title" hidden={!hasNws}>
     <div class="card-head">

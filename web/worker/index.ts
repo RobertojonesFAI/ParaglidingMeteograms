@@ -16,6 +16,7 @@ import { AccessError, verifyAccessJwt } from "./access.ts";
 import { GitHubError, listLaunches, saveLaunch } from "./github.ts";
 import { refresh } from "./refresh.ts";
 import { serveStation } from "./stations.ts";
+import { handleThermalVerifications } from "./thermals-verify.ts";
 import { validateLaunchInput } from "../src/lib/launches.ts";
 
 interface R2ObjectLike {
@@ -52,7 +53,7 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
 
 export async function serveData(request: Request, env: Env, key: string): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") return json(405, { error: "method not allowed" }, { allow: "GET, HEAD" });
-  if (!DATA_KEY.test(key) || key.includes("..")) return json(404, { error: "not found" });
+  if (!DATA_KEY.test(key) || key.includes("..") || key.startsWith("thermals/verifications/")) return json(404, { error: "not found" });
 
   const object = await env.DATA.get(key, { onlyIf: request.headers });
   if (object === null) return json(404, { error: "not found" }, { "cache-control": "public, max-age=60" });
@@ -115,6 +116,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/data/")) return serveData(request, env, decodeURIComponent(url.pathname.slice("/data/".length)));
     if (url.pathname === "/api/admin/launches") return admin(request, env);
+    if (url.pathname === "/api/thermals/verifications" || url.pathname === "/api/thermals/verify") {
+      return handleThermalVerifications(request, env.DATA);
+    }
     const station = /^\/api\/stations\/([^/]+)$/.exec(url.pathname);
     if (station) return serveStation(request, env, decodeURIComponent(station[1]));
     if (url.pathname.startsWith("/api/")) return json(404, { error: "not found" });

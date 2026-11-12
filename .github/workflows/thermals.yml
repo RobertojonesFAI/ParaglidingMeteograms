@@ -1,0 +1,60 @@
+# Runs the Boise ML thermal prediction pipeline once an hour at :07 past the
+# hour using real NOAA HRRR forecasts (via Herbie) and publishes
+# `thermal_predictions.json` to Cloudflare R2:
+#   - Downloads the previous cached `thermal_predictions.json` from R2.
+#   - Keeps all hours older than the current Boise hour (`< current_hour`) and
+#     all of `yesterday` frozen verbatim so completed hours never shift.
+#   - Updates only hours `>= current_hour` from the latest published HRRR run.
+#   - If NOAA HRRR is unavailable or validation fails, exits without uploading
+#     so the site continues showing the latest successful forecast.
+name: Boise thermal forecast
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force recomputation of current/future hours even if cached"
+        required: false
+        default: "false"
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: thermals
+  cancel-in-progress: false
+
+jobs:
+  thermals:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && vars.METEO_R2_BUCKET != ''
+    timeout-minutes: 25
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install ecCodes system library for cfgrib
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libeccodes-dev libeccodes-tools
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: thermals/requirements.txt
+      - name: Install Python dependencies
+        run: pip install -r thermals/requirements.txt
+      - name: Run hourly thermal prediction pipeline and publish to R2
+        run: |
+          if [ "${{ inputs.force }}" = "true" ]; then
+            python -m thermals.pipeline --force
+          else
+            python -m thermals.pipeline
+          fi
+

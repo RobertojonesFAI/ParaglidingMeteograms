@@ -1,0 +1,338 @@
+---
+import Base from "../layouts/Base.astro";
+import "../styles/thermals.css";
+---
+
+<Base
+  title="Thermal Map"
+  current="thermals"
+  description="Real-time 12-hour machine-learning thermal probability forecast across the Boise soaring domain powered by NOAA HRRR and terrain topography."
+>
+  <div class="th-page-head">
+    <div>
+      <p class="eyebrow"><a href="/launches/cervidae-peak">Boise, ID</a> · Machine-Learning Forecast</p>
+      <h1>Thermal Prediction Map</h1>
+      <p class="muted" style="margin-top:6px">
+        12-hour thermal generation probability across 690 terrain grid cells (~1.6 km) around Boise, combining NOAA HRRR
+        soundings, solar geometry, slope, aspect, and albedo.
+      </p>
+    </div>
+
+    <div class="th-head-actions">
+      <div class="th-retrieval-pill" id="retrieval-badge" title="Timestamp of current NOAA HRRR forecast ingest">
+        <span class="th-pulse-dot" aria-hidden="true"></span>
+        <span>Retrieved: <strong id="retrieval-time-display">Loading…</strong></span>
+      </div>
+      <button type="button" class="button secondary" id="btn-open-thresholds" title="Configure probability thresholds">
+        Thresholds
+      </button>
+    </div>
+  </div>
+
+  <!-- Top Controls: Day Selector + Model Selector + UI Style Switcher -->
+  <div class="th-controls-bar">
+    <div class="th-control-group">
+      <span class="control-label" id="thermal-day-label">Day</span>
+      <div class="segmented" id="thermal-day-tabs" role="group" aria-labelledby="thermal-day-label">
+        <button type="button" data-day="today" aria-pressed="true" id="btn-day-today">
+          Today <small id="label-date-today"></small>
+        </button>
+        <button type="button" data-day="yesterday" aria-pressed="false" id="btn-day-yesterday">
+          Yesterday <small id="label-date-yesterday"></small>
+        </button>
+      </div>
+    </div>
+
+    <div class="th-control-group">
+      <span class="control-label" id="thermal-model-label">Model</span>
+      <div class="segmented" id="thermal-model-tabs" role="group" aria-labelledby="thermal-model-label">
+        <button type="button" data-model="ensemble" aria-pressed="true">
+          <span class="th-dot th-dot-ensemble" aria-hidden="true"></span>Ensemble Consensus
+        </button>
+        <button type="button" data-model="lightgbm" aria-pressed="false">
+          <span class="th-dot th-dot-lgbm" aria-hidden="true"></span>LightGBM
+        </button>
+        <button type="button" data-model="xgboost" aria-pressed="false">
+          <span class="th-dot th-dot-xgb" aria-hidden="true"></span>XGBoost
+        </button>
+      </div>
+    </div>
+
+    <div class="th-control-group">
+      <span class="control-label" id="ui-style-label">UI Style</span>
+      <div class="segmented" role="group" aria-labelledby="ui-style-label">
+        <button type="button" data-ui-style="editorial" aria-pressed="true" title="Matches ParaglidingMeteograms editorial design">
+          Editorial
+        </button>
+        <button type="button" data-ui-style="immersive" aria-pressed="false" title="Full-bleed dark glassmorphism dashboard">
+          Immersive Dark
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12-Hour Forecast Horizon & Meteorology Summary -->
+  <section class="card th-timeline-card" aria-label="Forecast hour selection">
+    <div class="th-timeline-head">
+      <div class="th-horizon-title">
+        <span class="control-label" style="margin:0">Forecast Horizon</span>
+        <strong id="active-hour-display">Hour 0 (Now)</strong>
+        <span class="muted" id="active-date-display">—</span>
+        <span class="th-daylight-badge" id="daylight-status-badge">Daylight</span>
+      </div>
+
+      <div class="th-weather-pills" id="hourly-weather-summary">
+        <span class="th-weather-pill" title="2 m Surface Temperature">
+          Temp <strong id="weather-temp">--°C</strong>
+        </span>
+        <span class="th-weather-pill" title="10 m Surface Wind">
+          Wind <strong id="weather-wind">-- mph</strong>
+        </span>
+        <span class="th-weather-pill" title="Atmospheric Boundary Layer Height">
+          BLH <strong id="weather-blh">-- m</strong>
+        </span>
+        <span class="th-weather-pill" title="Convective Available Potential Energy">
+          CAPE <strong id="weather-cape">-- J/kg</strong>
+        </span>
+      </div>
+    </div>
+
+    <div class="th-hours-stepper" id="hours-stepper">
+      <!-- Populated dynamically by thermals.ts -->
+    </div>
+  </section>
+
+  <!-- Main Workspace: Interactive Map + Cell Intelligence Sidebar -->
+  <div class="th-workspace">
+    <section class="card th-map-card" aria-label="Thermal probability map">
+      <div class="th-map-toolbar">
+        <div class="th-control-group">
+          <span class="control-label" style="margin:0">Basemap</span>
+          <div class="segmented" role="group" aria-label="Basemap Style">
+            <button type="button" data-basemap="satellite" aria-pressed="true">Satellite</button>
+            <button type="button" data-basemap="topo" aria-pressed="false">Topo</button>
+          </div>
+        </div>
+
+        <div class="th-control-group">
+          <span class="control-label" style="margin:0">Filter</span>
+          <div class="segmented" role="group" aria-label="Cell Filter">
+            <button type="button" data-filter="all" aria-pressed="true">All Cells</button>
+            <button type="button" data-filter="high" aria-pressed="false">
+              <span class="th-dot th-dot-high" aria-hidden="true"></span>High Only
+            </button>
+            <button type="button" data-filter="med-high" aria-pressed="false">
+              <span class="th-dot th-dot-med" aria-hidden="true"></span>Med + High
+            </button>
+          </div>
+        </div>
+
+        <div class="th-control-group">
+          <span class="control-label" style="margin:0">Fly to</span>
+          <div class="segmented" role="group" aria-label="Hotspots">
+            <button type="button" class="quick-fly" data-spot="cervidae">Cervidae Peak</button>
+            <button type="button" class="quick-fly" data-spot="bogus">Bogus Basin</button>
+            <button type="button" class="quick-fly" data-spot="luckypeak">Lucky Peak</button>
+            <button type="button" class="quick-fly" data-spot="foothills">Foothills</button>
+            <button type="button" class="quick-fly" data-spot="reset">Overview</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="th-map-viewport">
+        <div id="thermal-map"></div>
+      </div>
+
+      <!-- Legend & Domain Statistics Bar -->
+      <div class="th-legend-bar">
+        <div class="th-legend-items">
+          <span class="th-legend-item">
+            <span class="th-swatch th-swatch-high" aria-hidden="true"></span>
+            <span>High (&ge; <span class="val-thresh-high">50%</span>): <strong id="stat-high-pct">--% (0 cells)</strong></span>
+          </span>
+          <span class="th-legend-item">
+            <span class="th-swatch th-swatch-med" aria-hidden="true"></span>
+            <span>
+              Medium (<span class="val-thresh-low">35%</span>–<span class="val-thresh-high">50%</span>):
+              <strong id="stat-med-pct">--% (0 cells)</strong>
+            </span>
+          </span>
+          <span class="th-legend-item">
+            <span class="th-swatch th-swatch-low" aria-hidden="true"></span>
+            <span>Low (&lt; <span class="val-thresh-low">35%</span>): <strong id="stat-low-pct">--% (0 cells)</strong></span>
+          </span>
+        </div>
+
+        <div class="th-legend-meta">
+          <span>Model: <strong id="legend-model-name">Ensemble Consensus</strong></span>
+          <span>Domain Mean: <strong id="stat-mean-prob">--%</strong></span>
+          <span>Cells: <strong id="stat-total-cells">690</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cell Intelligence Inspector -->
+    <aside class="card th-inspector-card" id="cell-inspector" aria-labelledby="inspector-heading">
+      <div class="card-head">
+        <h2 id="inspector-heading">Cell Intelligence</h2>
+        <button type="button" class="link-button" id="btn-close-inspector">Clear selection</button>
+      </div>
+
+      <div class="th-inspector-empty" id="inspector-empty">
+        <p>
+          Click on any grid cell across the Boise terrain to inspect its topography, solar heating, atmospheric forcing,
+          and multi-model thermal probability scores.
+        </p>
+      </div>
+
+      <div id="inspector-content" hidden>
+        <div class="th-zone-banner">
+          <span class="th-zone-name" id="cell-zone-name">Boise Foothills</span>
+          <span class="th-cell-tag" id="cell-id-tag">Cell #0</span>
+        </div>
+
+        <div class="th-section">
+          <h3 class="th-section-title">Terrain Topography</h3>
+          <div class="th-metrics-grid">
+            <div class="th-metric-box">
+              <span class="th-metric-label">Elevation</span>
+              <span class="th-metric-val" id="cell-elev">-- m</span>
+              <span class="th-metric-sub" id="cell-elev-ft">-- ft MSL</span>
+            </div>
+            <div class="th-metric-box">
+              <span class="th-metric-label">Slope</span>
+              <span class="th-metric-val" id="cell-slope">--°</span>
+              <span class="th-metric-sub" id="cell-slope-steepness">Steep</span>
+            </div>
+            <div class="th-metric-box">
+              <span class="th-metric-label">Aspect</span>
+              <span class="th-metric-val" id="cell-aspect">--°</span>
+              <span class="th-metric-sub" id="cell-aspect-cardinal">South</span>
+            </div>
+            <div class="th-metric-box">
+              <span class="th-metric-label">Solar Absorbed</span>
+              <span class="th-metric-val" id="cell-absorbed">--</span>
+              <span class="th-metric-sub">Ground heating</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="th-section">
+          <h3 class="th-section-title">Model Probability Comparison</h3>
+          <div class="th-model-scores">
+            <div class="th-score-row">
+              <div class="th-score-head">
+                <span><strong>Ensemble</strong> Consensus</span>
+                <span class="th-score-badge th-badge-high" id="badge-ensemble">High (--%)</span>
+              </div>
+              <div class="th-progress-track">
+                <div class="th-progress-fill th-fill-high" id="fill-ensemble" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <div class="th-score-row">
+              <div class="th-score-head">
+                <span><strong>LightGBM</strong> Gradient Trees</span>
+                <span class="th-score-badge th-badge-med" id="badge-lightgbm">Med (--%)</span>
+              </div>
+              <div class="th-progress-track">
+                <div class="th-progress-fill th-fill-med" id="fill-lightgbm" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <div class="th-score-row">
+              <div class="th-score-head">
+                <span><strong>XGBoost</strong> Histogram Trees</span>
+                <span class="th-score-badge th-badge-med" id="badge-xgboost">Med (--%)</span>
+              </div>
+              <div class="th-progress-track">
+                <div class="th-progress-fill th-fill-med" id="fill-xgboost" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="th-section">
+          <h3 class="th-section-title">Atmosphere at <span id="cell-hour-label">12:00 PM</span></h3>
+          <div class="th-metrics-grid">
+            <div class="th-metric-box">
+              <span class="th-metric-label">Surface Temp</span>
+              <span class="th-metric-val" id="cell-temp">--°C</span>
+            </div>
+            <div class="th-metric-box">
+              <span class="th-metric-label">10 m Wind</span>
+              <span class="th-metric-val" id="cell-wind">-- mph</span>
+            </div>
+            <div class="th-metric-box">
+              <span class="th-metric-label">Boundary Layer</span>
+              <span class="th-metric-val" id="cell-blh">-- m</span>
+            </div>
+            <div class="th-metric-box">
+              <span class="th-metric-label">Thermal Trigger</span>
+              <span class="th-metric-val" id="cell-trigger">--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="th-section th-verify-section">
+          <div class="th-verify-head">
+            <h3 class="th-section-title">Pilot Thermal Verification</h3>
+            <span class="th-verify-count" id="cell-verify-count">0 verified</span>
+          </div>
+          <p class="th-verify-note" id="cell-verify-status">
+            Available for hours that have already passed (1 per pilot per hour).
+          </p>
+          <button type="button" class="button th-verify-btn" id="btn-verify-thermal" disabled>
+            Verify thermal
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Threshold Tuning Modal -->
+  <div class="th-modal-overlay" id="threshold-modal" hidden role="dialog" aria-modal="true" aria-labelledby="threshold-modal-title">
+    <div class="card th-modal-card">
+      <div class="card-head">
+        <h2 id="threshold-modal-title">Threshold Tuning</h2>
+        <button type="button" class="link-button" id="btn-close-thresholds">Close</button>
+      </div>
+      <p class="muted">
+        Customize the probability cutoffs for classifying grid cells into Low (Red), Medium (Yellow), and High (Green)
+        thermal chance. Map cells and domain statistics update live.
+      </p>
+
+      <div class="th-slider-block">
+        <div class="th-slider-head">
+          <span>Low → Medium Cutoff (Red / Yellow)</span>
+          <strong id="display-low-thresh">35%</strong>
+        </div>
+        <input type="range" min="10" max="60" value="35" step="1" id="slider-low-thresh" />
+        <p class="muted" style="font-size:12px;margin-top:4px">
+          Probabilities below this threshold are colored Red (flat valleys, weak convection).
+        </p>
+      </div>
+
+      <div class="th-slider-block">
+        <div class="th-slider-head">
+          <span>Medium → High Cutoff (Yellow / Green)</span>
+          <strong id="display-high-thresh">50%</strong>
+        </div>
+        <input type="range" min="35" max="80" value="50" step="1" id="slider-high-thresh" />
+        <p class="muted" style="font-size:12px;margin-top:4px">
+          Probabilities at or above this threshold are colored Green (sun-exposed ridges, strong updrafts).
+        </p>
+      </div>
+
+      <div class="form-actions" style="justify-content:flex-end">
+        <button type="button" class="button secondary" id="btn-reset-thresholds">Reset to Defaults (35% / 50%)</button>
+        <button type="button" class="button" id="btn-apply-thresholds">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import "../scripts/thermals.ts";
+  </script>
+</Base>
+
