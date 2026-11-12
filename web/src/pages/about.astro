@@ -86,6 +86,17 @@ import Base from "../layouts/Base.astro";
     </section>
 
     <section class="card">
+      <h2>Thermal prediction map (Boise domain)</h2>
+      <p style="margin-top:8px">
+        The <a href="/thermals">Thermal Map</a> combines NOAA HRRR atmospheric soundings (lapse rates, boundary-layer height,
+        CAPE, wind shear, and surface heat fluxes) with terrain elevation, slope, aspect, albedo, and solar geometry to predict
+        thermal generation probability across 690 grid cells (~1.6 km resolution) over the next 12 hours. You can compare three
+        models side by side — LightGBM, XGBoost, and their Ensemble Consensus — and click any cell to inspect its topography
+        and atmospheric forcing.
+      </p>
+    </section>
+
+    <section class="card">
       <h2>National Weather Service forecast</h2>
       <p style="margin-top:8px">
         The official forecast issued by the National Weather Service for the launch's 2.5 km grid cell — the same data as the
