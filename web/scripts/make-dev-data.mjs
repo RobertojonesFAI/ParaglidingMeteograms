@@ -8,7 +8,7 @@
 //
 // Usage: node scripts/make-dev-data.mjs [--out dev-data]
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
@@ -507,6 +507,20 @@ for (const site of sites.sites) {
       history: parseWuHistory({ observations: rows }),
       historyFetchedAt: new Date(now).toISOString(),
     });
+  }
+}
+
+// Thermal prediction dataset (Boise domain): copy into dev-data only (never public/data).
+{
+  const candidates = [
+    new URL("../../thermals/data/forecast_predictions.json", import.meta.url),
+    new URL("../../../thermal_predicion/web/static/forecast_predictions.json", import.meta.url),
+  ];
+  const thermalSrc = candidates.find((u) => existsSync(u));
+  if (thermalSrc) {
+    const destDev = join(out, "thermal_predictions.json");
+    mkdirSync(dirname(destDev), { recursive: true });
+    copyFileSync(thermalSrc, destDev);
   }
 }
 

@@ -5,7 +5,7 @@ import { SITE_NAME, SITE_TAGLINE } from "../lib/site.ts";
 interface Props {
   title?: string;
   description?: string;
-  current?: "launches" | "about" | "admin";
+  current?: "launches" | "thermals" | "about" | "admin";
 }
 
 const { title, description = SITE_TAGLINE, current } = Astro.props;
@@ -37,6 +37,7 @@ const pageTitle = title ? `${title} · ${SITE_NAME}` : SITE_NAME;
         </a>
         <nav class="site-nav" aria-label="Main">
           <a href="/" aria-current={current === "launches" ? "page" : undefined}>Launches</a>
+          <a href="/thermals" aria-current={current === "thermals" ? "page" : undefined}>Thermal Map</a>
           <a href="/about" aria-current={current === "about" ? "page" : undefined}>About</a>
         </nav>
       </div>
