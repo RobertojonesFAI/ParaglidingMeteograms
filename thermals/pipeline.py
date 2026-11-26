@@ -5,14 +5,16 @@ Hourly thermal forecast for the Boise domain, published as thermal_predictions.j
   the LightGBM and XGBoost models on all 690 terrain cells.
 - Hours that have passed, and all of yesterday, are kept as they were last
   forecast, so they can be compared with what pilots found.
-- Months the models were not trained on (they saw March to September) are not
-  forecast: the day is published as out of season instead.
+- The models were trained on March to September. Other months are forecast
+  too, marked out of season so the page warns that the map is less reliable
+  (config.FORECAST_OUT_OF_SEASON = False publishes no hours then).
 - If anything fails, nothing is published and the site keeps the last forecast.
 
 Payload (schema 2):
     metadata   run, dates, default thresholds, the training season
     cells      the grid, once: id, lat, lon, elevation, slope, aspect, zone
-    days       today and yesterday, each with `supported` and `hours`; every
+    days       today and yesterday, each with `supported` (has hours),
+               `in_training_season` and `hours`; every
                hour has LightGBM and XGBoost probabilities per cell in thousandths
                (null while the sun is down), the share of sunlight each cell
                absorbs in percent, the domain's weather and the inputs that were
@@ -36,6 +38,7 @@ from .config import (
     BOISE_TIMEZONE,
     DAYTIME_HOURS_LOCAL,
     FORECAST_CACHE_FILE,
+    FORECAST_OUT_OF_SEASON,
     GRID_RESOLUTION_DEG,
     HIGH_THRESHOLD,
     LOW_THRESHOLD,
@@ -259,11 +262,11 @@ def run_pipeline(
     cells = load_terrain_grid()
     previous = load_previous(cache_file=cache_file)
 
-    days_wanted = {
-        "today": (now_local, predictor.season_supported(now_local.month)),
-        "yesterday": (yesterday_local, predictor.season_supported(yesterday_local.month)),
-    }
-    in_season = any(supported for _, supported in days_wanted.values())
+    days_wanted = {}
+    for key, day_local in (("today", now_local), ("yesterday", yesterday_local)):
+        in_training_season = predictor.season_supported(day_local.month)
+        days_wanted[key] = (day_local, in_training_season or FORECAST_OUT_OF_SEASON, in_training_season)
+    in_season = any(supported for _, supported, _ in days_wanted.values())
 
     run_time_utc = None
     fetcher = None
@@ -284,6 +287,8 @@ def run_pipeline(
         fetcher = fetcher_factory(terrain_cells=cells, run_time_utc=run_time_utc)
     else:
         logging.info("Out of the models' training season: publishing no forecast hours.")
+    if any(supported and not trained for _, supported, trained in days_wanted.values()):
+        logging.warning("Forecasting outside the models' March-September training season.")
 
     # The hours already forecast, by date.
     frozen: dict[str, dict[int, dict]] = {}
@@ -295,7 +300,7 @@ def run_pipeline(
     updated_count = 0
     days = {}
     try:
-        for key, (day_local, supported) in days_wanted.items():
+        for key, (day_local, supported, in_training_season) in days_wanted.items():
             date_iso = day_local.strftime("%Y-%m-%d")
             hours = []
             if supported:
@@ -313,6 +318,7 @@ def run_pipeline(
                 "date_iso": date_iso,
                 "date_display": day_local.strftime("%a, %b %-d"),
                 "supported": supported,
+                "in_training_season": in_training_season,
                 "hours": hours,
             }
     finally:

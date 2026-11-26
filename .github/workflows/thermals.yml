@@ -3,16 +3,15 @@
 #   - Fetches NOAA HRRR (via Herbie) for the hours of today that have not
 #     passed and runs the two models on the 690 cells.
 #   - Hours that have passed, and all of yesterday, keep the forecast they had.
-#   - Outside the models' March–September training season it publishes no
-#     hours, so it only needs to run once a day then.
+#   - The models were trained on March to September; other months are
+#     forecast too, marked out of season so the page warns about them.
 #   - If NOAA HRRR is unavailable or the result fails validation, it publishes
 #     nothing and the site keeps the last forecast.
 name: Boise thermal forecast
 
 on:
   schedule:
-    - cron: "7 * * 3-9 *" # hourly, March to September
-    - cron: "7 13 * 1,2,10,11,12 *" # once a day, early morning in Boise
+    - cron: "7 * * * *"
   workflow_dispatch:
     inputs:
       force:

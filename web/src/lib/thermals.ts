@@ -44,8 +44,10 @@ export interface ThermalHour {
 export interface ThermalDay {
   date_iso: string;
   date_display: string;
-  /** False in the months the models were not trained on: no hours then. */
+  /** False when the day has no hours (out of season, if the pipeline skips those months). */
   supported: boolean;
+  /** Whether the models saw this month in training (March to September). */
+  in_training_season?: boolean;
   hours: ThermalHour[];
 }
 

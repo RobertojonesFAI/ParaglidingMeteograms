@@ -125,6 +125,13 @@ function showNotice() {
     const day = activeDay();
     const { first_month, last_month } = data.metadata.season;
     if (data.metadata.sample) lines.push("Sample data for development: not a forecast.");
+    if (day?.supported && day.in_training_season === false) {
+      lines.push(
+        `Out of season: the models were trained on data from ${monthName(first_month)} to ${monthName(last_month)} and ` +
+          `have never seen ${monthName(Number(day.date_iso.slice(5, 7)))}. Treat this map as a rough guide only; ` +
+          `it is more reliable from ${monthName(first_month)} to ${monthName(last_month)}.`,
+      );
+    }
     if (day && !day.supported) {
       lines.push(
         `No forecast for ${day.date_display}: the models were trained on data from ${monthName(first_month)} to ` +
@@ -137,14 +144,17 @@ function showNotice() {
     }
     const hour = activeHour();
     if (hour?.inputs_outside_training.length) {
-      const names = [...new Set(hour.inputs_outside_training.map((n) => INPUT_LABELS[n] ?? n))].join(", ");
-      lines.push(`At this hour some inputs are outside what the models saw in training (${names}): treat the map with extra caution.`);
+      // The month is already covered by the out-of-season notice.
+      const names = [...new Set(hour.inputs_outside_training.filter((n) => n !== "month").map((n) => INPUT_LABELS[n] ?? n))].join(", ");
+      if (names) lines.push(`At this hour some inputs are outside what the models saw in training (${names}): treat the map with extra caution.`);
     }
   } else {
     lines.push("The thermal forecast is not available right now.");
   }
   el.textContent = lines.join(" ");
   el.hidden = lines.length === 0;
+  // Amber when the map needs caution (the site's sample-data style).
+  el.classList.toggle("sample", lines.length > 0);
 }
 
 // ---------------------------------------------------------------- map

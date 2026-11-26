@@ -37,6 +37,11 @@ BOISE_TIMEZONE = "America/Boise"
 # The forecast hours shown each day (local time), 8 AM to 8 PM.
 DAYTIME_HOURS_LOCAL = list(range(8, 21))
 
+# The models were trained on March to September. Outside those months the
+# forecast is still published, with each day marked out of season so the page
+# warns that it is less reliable. False publishes no hours in those months.
+FORECAST_OUT_OF_SEASON = True
+
 # Default probability cutoffs for the map's colours; visitors can change them.
 LOW_THRESHOLD = 0.35
 HIGH_THRESHOLD = 0.50
