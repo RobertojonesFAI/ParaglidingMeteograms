@@ -8,6 +8,7 @@ import pytest
 
 from thermals.config import DAYTIME_HOURS_LOCAL, SCALER_STATS
 from thermals.models_inference import ThermalPredictor
+import thermals.pipeline as pipeline_module
 from thermals.pipeline import SCHEMA, run_pipeline
 
 MEDIANS = json.loads(SCALER_STATS.read_text())["centers"]
@@ -112,9 +113,22 @@ def test_after_midnight_today_becomes_yesterday(tmp_path, predictor):
     assert FakeFetcher.fetched == [f"2026-07-16 {h:02d}" for h in DAYTIME_HOURS_LOCAL]
 
 
-def test_out_of_season_nothing_is_forecast_or_fetched(tmp_path, predictor):
-    november = datetime(2026, 11, 25, 20, 30, tzinfo=timezone.utc)
-    payload, published = run(tmp_path, november, predictor)
+NOVEMBER = datetime(2026, 11, 25, 20, 30, tzinfo=timezone.utc)
+
+
+def test_out_of_season_is_forecast_and_marked(tmp_path, predictor):
+    payload, _ = run(tmp_path, NOVEMBER, predictor)
+    for day in payload["days"].values():
+        assert day["supported"] is True and day["in_training_season"] is False
+        assert len(day["hours"]) == 13
+    assert len(FakeFetcher.fetched) == 26
+    summer, _ = run(tmp_path, SUMMER_AFTERNOON, predictor)
+    assert summer["days"]["today"]["in_training_season"] is True
+
+
+def test_with_the_season_gate_on_nothing_is_forecast_or_fetched(tmp_path, predictor, monkeypatch):
+    monkeypatch.setattr(pipeline_module, "FORECAST_OUT_OF_SEASON", False)
+    payload, published = run(tmp_path, NOVEMBER, predictor)
     assert FakeFetcher.fetched == []
     for day in payload["days"].values():
         assert day["supported"] is False and day["hours"] == []
@@ -122,7 +136,8 @@ def test_out_of_season_nothing_is_forecast_or_fetched(tmp_path, predictor):
     assert len(published) == 1
 
 
-def test_on_the_first_day_out_of_season_yesterday_is_still_shown(tmp_path, predictor):
+def test_with_the_season_gate_on_yesterday_is_still_shown_on_october_first(tmp_path, predictor, monkeypatch):
+    monkeypatch.setattr(pipeline_module, "FORECAST_OUT_OF_SEASON", False)
     october_first = datetime(2026, 10, 1, 20, 30, tzinfo=timezone.utc)
     payload, _ = run(tmp_path, october_first, predictor)
     assert payload["days"]["today"]["supported"] is False
