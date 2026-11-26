@@ -36,6 +36,8 @@
   // Secrets (set with `wrangler secret put` or in the dashboard, never in this file):
   //   GITHUB_TOKEN  fine-grained token with Contents read/write on this repository only
   //   WU_API_KEY    Weather Underground API key for the stations in src/data/stations.json
+  //   THERMALS_VOTE_SECRET  random string (e.g. `openssl rand -hex 32`) that keys the hashes of
+  //                 the thermal reports on /thermals; without it the page can't take reports
   "observability": {
     "enabled": true
   }

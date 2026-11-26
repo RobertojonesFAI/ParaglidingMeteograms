@@ -1,20 +1,28 @@
 ---
 import Base from "../layouts/Base.astro";
+import { launches } from "../lib/catalog.ts";
+import { inThermalDomain } from "../lib/thermal-domain.ts";
 import "../styles/thermals.css";
+
+// The launches on the map: marked, and offered as places to fly to.
+const mapLaunches = launches
+  .filter((l) => inThermalDomain(l.latitude, l.longitude))
+  .map((l) => ({ slug: l.slug, name: l.name, lat: l.latitude, lon: l.longitude }));
 ---
 
 <Base
   title="Thermal Map"
   current="thermals"
-  description="Real-time 12-hour machine-learning thermal probability forecast across the Boise soaring domain powered by NOAA HRRR and terrain topography."
+  description="Experimental machine-learning forecast of the chance of thermals around Boise, hour by hour, from NOAA HRRR and the terrain."
 >
   <div class="th-page-head">
     <div>
-      <p class="eyebrow"><a href="/launches/cervidae-peak">Boise, ID</a> · Machine-Learning Forecast</p>
-      <h1>Thermal Prediction Map</h1>
+      <p class="eyebrow">Boise, ID · Experimental machine-learning forecast</p>
+      <h1>Thermal Map</h1>
       <p class="muted" style="margin-top:6px">
-        12-hour thermal generation probability across 690 terrain grid cells (~1.6 km) around Boise, combining NOAA HRRR
-        soundings, solar geometry, slope, aspect, and albedo.
+        The chance of thermals each hour from 8 AM to 8 PM on 690 cells of about 1.6 km around Boise, from NOAA HRRR
+        soundings, the sun and each cell's slope, facing and ground. Two models trained on past data give their own
+        numbers; the ensemble is their mean.
       </p>
     </div>
 
@@ -28,6 +36,8 @@ import "../styles/thermals.css";
       </button>
     </div>
   </div>
+
+  <p class="notice" id="thermal-notice" hidden></p>
 
   <!-- Top Controls: Day Selector + Model Selector + UI Style Switcher -->
   <div class="th-controls-bar">
@@ -82,6 +92,7 @@ import "../styles/thermals.css";
       </div>
 
       <div class="th-weather-pills" id="hourly-weather-summary">
+        <span class="control-label" style="margin:0">Domain average</span>
         <span class="th-weather-pill" title="2 m Surface Temperature">
           Temp <strong id="weather-temp">--°C</strong>
         </span>
@@ -130,7 +141,9 @@ import "../styles/thermals.css";
         <div class="th-control-group">
           <span class="control-label" style="margin:0">Fly to</span>
           <div class="segmented" role="group" aria-label="Hotspots">
-            <button type="button" class="quick-fly" data-spot="cervidae">Cervidae Peak</button>
+            {mapLaunches.map((l) => (
+              <button type="button" class="quick-fly" data-launch={l.slug}>{l.name}</button>
+            ))}
             <button type="button" class="quick-fly" data-spot="bogus">Bogus Basin</button>
             <button type="button" class="quick-fly" data-spot="luckypeak">Lucky Peak</button>
             <button type="button" class="quick-fly" data-spot="foothills">Foothills</button>
@@ -140,7 +153,7 @@ import "../styles/thermals.css";
       </div>
 
       <div class="th-map-viewport">
-        <div id="thermal-map"></div>
+        <div id="thermal-map" data-launches={JSON.stringify(mapLaunches)}></div>
       </div>
 
       <!-- Legend & Domain Statistics Bar -->
@@ -253,7 +266,7 @@ import "../styles/thermals.css";
         </div>
 
         <div class="th-section">
-          <h3 class="th-section-title">Atmosphere at <span id="cell-hour-label">12:00 PM</span></h3>
+          <h3 class="th-section-title">Domain average at <span id="cell-hour-label">12:00 PM</span></h3>
           <div class="th-metrics-grid">
             <div class="th-metric-box">
               <span class="th-metric-label">Surface Temp</span>
@@ -276,14 +289,14 @@ import "../styles/thermals.css";
 
         <div class="th-section th-verify-section">
           <div class="th-verify-head">
-            <h3 class="th-section-title">Pilot Thermal Verification</h3>
-            <span class="th-verify-count" id="cell-verify-count">0 verified</span>
+            <h3 class="th-section-title">Pilot reports</h3>
+            <span class="th-verify-count" id="cell-verify-count">0 reports</span>
           </div>
           <p class="th-verify-note" id="cell-verify-status">
-            Available for hours that have already passed (1 per pilot per hour).
+            Once an hour has passed, report the cell where you found a thermal: one report per pilot per hour.
           </p>
           <button type="button" class="button th-verify-btn" id="btn-verify-thermal" disabled>
-            Verify thermal
+            I found a thermal here
           </button>
         </div>
       </div>

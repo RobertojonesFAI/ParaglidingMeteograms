@@ -9,10 +9,7 @@ import pandas as pd
 import pvlib
 import pytz
 
-try:
-    from .config import BOISE_CENTER_LAT, BOISE_CENTER_LON, BOISE_TIMEZONE
-except ImportError:
-    from config import BOISE_CENTER_LAT, BOISE_CENTER_LON, BOISE_TIMEZONE
+from .config import BOISE_CENTER_LAT, BOISE_CENTER_LON, BOISE_TIMEZONE
 
 
 def get_solar_context(dt_utc: datetime):
