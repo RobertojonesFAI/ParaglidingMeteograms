@@ -8,6 +8,8 @@
 //                            requires a valid Cloudflare Access login
 //   GET /api/stations/<id>   a weather station's latest report and recent
 //                            history (stations.ts; needs the WU_API_KEY secret)
+//   /api/thermals/...        pilots' thermal reports for the /thermals map
+//                            (thermals-verify.ts; needs THERMALS_VOTE_SECRET)
 //
 // and, on the schedule in wrangler.jsonc, refreshes the Soaring Forecast, the
 // Area Forecast Discussion and the weather-balloon flights (refresh.ts).
@@ -16,7 +18,7 @@ import { AccessError, verifyAccessJwt } from "./access.ts";
 import { GitHubError, listLaunches, saveLaunch } from "./github.ts";
 import { refresh } from "./refresh.ts";
 import { serveStation } from "./stations.ts";
-import { handleThermalVerifications } from "./thermals-verify.ts";
+import { handleThermalVerifications, VERIFICATIONS_PREFIX, type VerificationBucket } from "./thermals-verify.ts";
 import { validateLaunchInput } from "../src/lib/launches.ts";
 
 interface R2ObjectLike {
@@ -30,7 +32,12 @@ export interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
   DATA: {
     get(key: string, options?: { onlyIf?: Headers }): Promise<R2ObjectLike | null>;
-    put(key: string, value: string, options?: { httpMetadata?: { contentType?: string; cacheControl?: string } }): Promise<unknown>;
+    put(
+      key: string,
+      value: string,
+      options?: { httpMetadata?: { contentType?: string; cacheControl?: string }; customMetadata?: Record<string, string> },
+    ): Promise<unknown>;
+    list: VerificationBucket["list"];
   };
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
@@ -39,6 +46,7 @@ export interface Env {
   GITHUB_REPO?: string;
   GITHUB_BRANCH?: string;
   WU_API_KEY?: string;
+  THERMALS_VOTE_SECRET?: string;
 }
 
 // JSON documents, gzipped history lines, and the sunlight map's binary tiles.
@@ -53,7 +61,7 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
 
 export async function serveData(request: Request, env: Env, key: string): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") return json(405, { error: "method not allowed" }, { allow: "GET, HEAD" });
-  if (!DATA_KEY.test(key) || key.includes("..") || key.startsWith("thermals/verifications/")) return json(404, { error: "not found" });
+  if (!DATA_KEY.test(key) || key.includes("..") || key.startsWith(VERIFICATIONS_PREFIX)) return json(404, { error: "not found" });
 
   const object = await env.DATA.get(key, { onlyIf: request.headers });
   if (object === null) return json(404, { error: "not found" }, { "cache-control": "public, max-age=60" });
@@ -117,7 +125,7 @@ export default {
     if (url.pathname.startsWith("/data/")) return serveData(request, env, decodeURIComponent(url.pathname.slice("/data/".length)));
     if (url.pathname === "/api/admin/launches") return admin(request, env);
     if (url.pathname === "/api/thermals/verifications" || url.pathname === "/api/thermals/verify") {
-      return handleThermalVerifications(request, env.DATA);
+      return handleThermalVerifications(request, env.DATA, { secret: env.THERMALS_VOTE_SECRET });
     }
     const station = /^\/api\/stations\/([^/]+)$/.exec(url.pathname);
     if (station) return serveStation(request, env, decodeURIComponent(station[1]));

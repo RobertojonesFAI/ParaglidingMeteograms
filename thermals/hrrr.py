@@ -10,24 +10,12 @@ import shutil
 import warnings
 from datetime import datetime, timedelta, timezone
 import numpy as np
-import pytz
 from scipy.spatial import cKDTree
 from herbie import Herbie
 
-try:
-    from .config import (
-        DATA_DIR,
-        BOISE_TIMEZONE,
-        DAYTIME_HOURS_LOCAL,
-    )
-    from .solar import get_solar_context
-except ImportError:
-    from config import (
-        DATA_DIR,
-        BOISE_TIMEZONE,
-        DAYTIME_HOURS_LOCAL,
-    )
-    from solar import get_solar_context
+from .config import DATA_DIR
+from .features import sounding_features
+from .solar import get_solar_context
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -137,7 +125,6 @@ class HRRRBoiseFetcher:
 
     def _resolve_cycle_and_fxx(self, valid_utc: datetime) -> tuple[datetime, int]:
         valid_utc_clean = valid_utc.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
-        now_utc = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
         # Past hours (e.g. cold-start backfill): use the historical HRRR cycle near that valid time
         if valid_utc_clean < self.run_time_utc:
@@ -206,8 +193,8 @@ class HRRRBoiseFetcher:
     def fetch_hour(self, valid_local: datetime) -> dict:
         """
         Fetches real HRRR data for `valid_local` across all 690 Boise cells.
-        Returns a dict containing `summary` (for the hourly weather bar) and
-        `cell_features` (list of 690 dicts with all meteorological ML features).
+        Returns a dict containing `summary` (domain averages for the hourly weather bar) and
+        `cell_features` (each meteorological model input as an array with one value per cell).
         """
         valid_utc = valid_local.astimezone(timezone.utc)
         cycle_utc, fxx = self._resolve_cycle_and_fxx(valid_utc)
@@ -344,62 +331,42 @@ class HRRRBoiseFetcher:
         v_2000 = interp_at_height(gh_uv_mat, v_mat, 2000.0)
         v_7000 = interp_at_height(gh_uv_mat, v_mat, 7000.0)
 
-        # Training Skew-T derived formulas from data_preparation_pipeline_multiregion.py
-        low_temp = t2m_c
-        low_dew = d2m_c
+        sounding = sounding_features(
+            low_temp_c=t2m_c,
+            low_dew_c=d2m_c,
+            temp_c={1000: temp_1000, 8000: temp_8000},
+            dew_c={1000: dew_1000, 4000: dew_4000, 11000: dew_11000},
+        )
 
-        tol_8000 = (low_temp - temp_8000) * 1000.0 / 8.0
-        tol_1000 = (low_temp - temp_1000) * 1000.0 / 8.0
-
-        dew_diff_1000 = dew_1000 - low_dew
-        dew_diff_4000 = dew_4000 - low_dew
-        dew_diff_11000 = dew_11000 - low_dew
-
-        env_lapse_rate_1000 = dew_diff_1000 * 1000.0 / (1000.0 - 379.0)
-        env_lapse_rate_4000 = dew_diff_4000 * 1000.0 / (4000.0 - 379.0)
-        env_lapse_rate_11000 = dew_diff_11000 * 1000.0 / (11000.0 - 379.0)
-
-        instability_1000 = env_lapse_rate_1000 - 9.8
-        instability_11000 = env_lapse_rate_11000 - 9.8
-        dew_height_4000 = dew_diff_4000 * 1000.0 / 9.8
-
-        denom_inv = np.maximum(np.maximum(temp_1000, low_temp), 1.0)
-        inversion_layer_1000 = (temp_1000 - low_temp) / denom_inv
-
-        cell_features = []
-        for i in range(n_cells):
-            cell_features.append({
-                "TOL_8000": float(tol_8000[i]),
-                "TOL_1000": float(tol_1000[i]),
-                "u_wind_6500": float(u_6500[i]),
-                "u_wind_2000": float(u_2000[i]),
-                "v_wind_7000": float(v_7000[i]),
-                "v_wind_2000": float(v_2000[i]),
-                "temperature_8000": float(temp_8000[i]),
-                "temperature_2500": float(temp_2500[i]),
-                "pressure_10000": float(pres_10000[i]),
-                "pressure_2500": float(pres_2500[i]),
-                "env_lapse_rate_4000": float(env_lapse_rate_4000[i]),
-                "env_lapse_rate_11000": float(env_lapse_rate_11000[i]),
-                "instability_1000": float(instability_1000[i]),
-                "instability_11000": float(instability_11000[i]),
-                "dew_height_4000": float(dew_height_4000[i]),
-                "inversion_layer_1000": float(inversion_layer_1000[i]),
-                "blh_sfc": float(blh_sfc[i]),
-                "cape_sfc": float(cape_sfc[i]),
-                "cin_sfc": float(cin_sfc[i]),
-                "d2m_subh": float(d2m_k[i]),
-                "diffuse_fraction": float(diffuse_fraction[i]),
-                "fricv_sfc": float(fricv_sfc[i]),
-                "fsr_sfc": float(fsr_sfc[i]),
-                "full_net_radiation": float(full_net_radiation[i]),
-                "gust_subh": float(gust_subh[i]),
-                "ishf_sfc": float(ishf_sfc[i]),
-                "lftx_sfc": float(lftx_sfc[i]),
-                "orog_subh": float(orog_subh[i]),
-                "wind_speed_ms": float(wind_speed_ms[i]),
-                "wind_dir_deg": float(wind_dir_deg[i]),
-            })
+        # One array per input, each with a value per cell.
+        cell_features = {
+            **{name: sounding[name] for name in (
+                "TOL_8000", "TOL_1000", "env_lapse_rate_4000", "env_lapse_rate_11000",
+                "instability_1000", "instability_11000", "dew_height_4000", "inversion_layer_1000",
+            )},
+            "u_wind_6500": u_6500,
+            "u_wind_2000": u_2000,
+            "v_wind_7000": v_7000,
+            "v_wind_2000": v_2000,
+            "temperature_8000": temp_8000,
+            "temperature_2500": temp_2500,
+            "pressure_10000": pres_10000,
+            "pressure_2500": pres_2500,
+            "blh_sfc": blh_sfc,
+            "cape_sfc": cape_sfc,
+            "cin_sfc": cin_sfc,
+            "d2m_subh": d2m_k,
+            "diffuse_fraction": diffuse_fraction,
+            "fricv_sfc": fricv_sfc,
+            "fsr_sfc": fsr_sfc,
+            "full_net_radiation": full_net_radiation,
+            "gust_subh": gust_subh,
+            "ishf_sfc": ishf_sfc,
+            "lftx_sfc": lftx_sfc,
+            "orog_subh": orog_subh,
+            "wind_speed_ms": wind_speed_ms,
+            "wind_dir_deg": wind_dir_deg,
+        }
 
         mean_u10 = float(np.mean(u10))
         mean_v10 = float(np.mean(v10))

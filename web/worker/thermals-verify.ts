@@ -1,47 +1,50 @@
-// Thermal verification endpoints for /thermals:
-//   GET  /api/thermals/verifications?date=YYYY-MM-DD&hour=H
-//   POST /api/thermals/verify   body: { dateIso, hour, cellId }
+// Pilot thermal reports for the /thermals map:
+//   GET  /api/thermals/verifications?date=YYYY-MM-DD&hour=H[&device=ID]
+//   POST /api/thermals/verify   body: { dateIso, hour, cellId, device }
 //
-// Stores per-day verification logs in R2 at `thermals/verifications/<YYYY-MM-DD>.json`.
-// Each entry records { cellId, ip, timestamp }. Only hours that have already
-// passed in America/Boise are accepted, and each IP may verify at most once per
-// (dateIso, hour). Public GET responses return aggregated cell counts and whether
-// the requesting IP has already verified that hour, without exposing visitor IPs.
+// A pilot reports the cell where they found a thermal during an hour that has
+// already passed (today or yesterday in America/Boise). Each report is its own
+// R2 object, so concurrent reports never overwrite each other:
+//
+//   thermals/verifications/<date>/<hour>/<network>.<device>   customMetadata { cellId }
+//
+// <network> and <device> are HMAC-SHA256 digests keyed with the
+// THERMALS_VOTE_SECRET secret and the date, so neither the visitor's IP nor
+// their device ID is stored, and the same visitor cannot be linked across days.
+// <device> is a random ID the page keeps in localStorage: pilots on the same
+// mobile network often share an IP, so the IP alone would let only one of them
+// report. A device reporting again for the same hour replaces its report, and
+// one network may report at most MAX_REPORTS_PER_NETWORK times an hour.
+// The Worker never serves these objects under /data.
+
+export interface VoteObject {
+  key: string;
+  customMetadata?: Record<string, string>;
+}
 
 export interface VerificationBucket {
-  get(key: string): Promise<{ text?(): Promise<string>; body?: ReadableStream } | null>;
-  put(
-    key: string,
-    value: string,
-    options?: { httpMetadata?: { contentType?: string; cacheControl?: string } },
-  ): Promise<unknown>;
+  put(key: string, value: string, options?: { customMetadata?: Record<string, string> }): Promise<unknown>;
+  list(options: {
+    prefix: string;
+    cursor?: string;
+    include?: Array<"customMetadata">;
+  }): Promise<{ objects: VoteObject[]; truncated: boolean; cursor?: string }>;
 }
 
-export interface ThermalVerificationEntry {
-  cellId: number;
-  ip: string;
-  timestamp: string;
-}
-
-export interface HourVerificationRecord {
-  entries: ThermalVerificationEntry[];
-  countsByCell: Record<string, number>;
-}
-
-export interface DayVerificationDocument {
-  schemaVersion: 1;
-  dateIso: string;
-  hours: Record<string, HourVerificationRecord>;
+export interface VerifyOptions {
+  now?: number;
+  secret?: string;
 }
 
 const BOISE_TZ = "America/Boise";
 const DATE_ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DEVICE_RE = /^[A-Za-z0-9-]{16,64}$/;
 const MIN_HOUR = 8;
 const MAX_HOUR = 20;
 const MIN_CELL_ID = 1;
 const MAX_CELL_ID = 690;
-
-export const verificationKey = (dateIso: string) => `thermals/verifications/${dateIso}.json`;
+export const MAX_REPORTS_PER_NETWORK = 10;
+export const VERIFICATIONS_PREFIX = "thermals/verifications/";
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -55,7 +58,7 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
   });
 }
 
-function formatBoiseDateAndHour(ms: number): { dateIso: string; hour: number } {
+function boiseDateAndHour(ms: number): { dateIso: string; hour: number } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: BOISE_TZ,
     year: "numeric",
@@ -64,176 +67,124 @@ function formatBoiseDateAndHour(ms: number): { dateIso: string; hour: number } {
     hour: "2-digit",
     hourCycle: "h23",
   }).formatToParts(new Date(ms));
-
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  const dateIso = `${get("year")}-${get("month")}-${get("day")}`;
-  const rawHour = Number(get("hour"));
-  const hour = rawHour === 24 ? 0 : rawHour;
-  return { dateIso, hour };
+  return { dateIso: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) % 24 };
 }
 
-export function getBoiseClock(nowMs = Date.now()): {
-  todayIso: string;
-  yesterdayIso: string;
-  currentHour: number;
-} {
-  const today = formatBoiseDateAndHour(nowMs);
-  // Step back 24h (and if DST shifted, noon-to-noon safe check)
-  const yesterday = formatBoiseDateAndHour(nowMs - 24 * 3600_000);
-  return {
-    todayIso: today.dateIso,
-    yesterdayIso: yesterday.dateIso,
-    currentHour: today.hour,
-  };
-}
-
+/** Whether pilots can report for this hour: it is yesterday, or today and has ended. */
 export function isPastBoiseHour(dateIso: string, hour: number, nowMs = Date.now()): boolean {
-  if (!DATE_ISO_RE.test(dateIso)) return false;
-  if (!Number.isInteger(hour) || hour < MIN_HOUR || hour > MAX_HOUR) return false;
-
-  const clock = getBoiseClock(nowMs);
-  if (dateIso === clock.yesterdayIso) {
-    return true;
-  }
-  if (dateIso === clock.todayIso) {
-    return hour < clock.currentHour;
-  }
-  return false;
+  if (!DATE_ISO_RE.test(dateIso) || !Number.isInteger(hour) || hour < MIN_HOUR || hour > MAX_HOUR) return false;
+  const today = boiseDateAndHour(nowMs);
+  // Noon today minus a day is always yesterday's date, whatever the DST change.
+  const noonUtcGuess = Date.parse(`${today.dateIso}T12:00:00Z`);
+  const yesterday = boiseDateAndHour(noonUtcGuess - 24 * 3600_000).dateIso;
+  if (dateIso === yesterday) return true;
+  return dateIso === today.dateIso && hour < today.hour;
 }
 
-export function getClientIp(request: Request): string {
-  const cfIp = request.headers.get("cf-connecting-ip")?.trim();
-  if (cfIp) return cfIp;
-  const xff = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  if (xff) return xff;
-  return "127.0.0.1";
+async function digest(secret: string, ...parts: string[]): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+  ]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(parts.join("\n")));
+  return [...new Uint8Array(mac).slice(0, 12)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function readDayDocument(bucket: VerificationBucket, dateIso: string): Promise<DayVerificationDocument> {
-  const obj = await bucket.get(verificationKey(dateIso));
-  if (obj) {
-    try {
-      const raw = obj.text ? await obj.text() : obj.body ? await new Response(obj.body).text() : "";
-      if (raw) {
-        const parsed = JSON.parse(raw) as DayVerificationDocument;
-        if (parsed && typeof parsed === "object" && parsed.hours && typeof parsed.hours === "object") {
-          return parsed;
-        }
-      }
-    } catch {
-      // Fall back to fresh document if corrupted
-    }
+const hourPrefix = (dateIso: string, hour: number) => `${VERIFICATIONS_PREFIX}${dateIso}/${hour}/`;
+
+async function listHour(bucket: VerificationBucket, prefix: string): Promise<VoteObject[]> {
+  const objects: VoteObject[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ prefix, cursor, include: ["customMetadata"] });
+    objects.push(...page.objects);
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return objects;
+}
+
+function summarize(objects: VoteObject[], prefix: string, deviceKey: string | null) {
+  const countsByCell: Record<string, number> = {};
+  let userVerifiedCellId: number | null = null;
+  for (const object of objects) {
+    const cell = object.customMetadata?.cellId;
+    if (!cell) continue;
+    countsByCell[cell] = (countsByCell[cell] ?? 0) + 1;
+    if (deviceKey && object.key.slice(prefix.length).split(".")[1] === deviceKey) userVerifiedCellId = Number(cell);
   }
   return {
-    schemaVersion: 1,
-    dateIso,
-    hours: {},
+    countsByCell,
+    totalVerifications: objects.length,
+    userVerified: userVerifiedCellId !== null,
+    userVerifiedCellId,
   };
+}
+
+function clientIp(request: Request): string {
+  return request.headers.get("cf-connecting-ip")?.trim() || "unknown";
 }
 
 export async function handleThermalVerifications(
   request: Request,
   bucket: VerificationBucket,
-  options: { now?: number } = {},
+  options: VerifyOptions = {},
 ): Promise<Response> {
   const nowMs = options.now ?? Date.now();
   const url = new URL(request.url);
+  const secret = options.secret ?? "";
 
   if (request.method === "GET" && url.pathname === "/api/thermals/verifications") {
     const dateIso = (url.searchParams.get("date") ?? "").trim();
     const hour = Number(url.searchParams.get("hour"));
+    const device = url.searchParams.get("device") ?? "";
     if (!DATE_ISO_RE.test(dateIso) || !Number.isInteger(hour) || hour < MIN_HOUR || hour > MAX_HOUR) {
       return json(400, { error: "expected ?date=YYYY-MM-DD&hour=8..20" });
     }
-
-    const doc = await readDayDocument(bucket, dateIso);
-    const hourRec = doc.hours[String(hour)] ?? { entries: [], countsByCell: {} };
-    const clientIp = getClientIp(request);
-    const existing = hourRec.entries.find((e) => e.ip === clientIp);
-
+    const prefix = hourPrefix(dateIso, hour);
+    const deviceKey = secret && DEVICE_RE.test(device) ? await digest(secret, dateIso, "device", device) : null;
     return json(200, {
       dateIso,
       hour,
       isPastHour: isPastBoiseHour(dateIso, hour, nowMs),
-      countsByCell: hourRec.countsByCell,
-      totalVerifications: hourRec.entries.length,
-      userVerified: Boolean(existing),
-      userVerifiedCellId: existing ? existing.cellId : null,
+      ...summarize(await listHour(bucket, prefix), prefix, deviceKey),
     });
   }
 
   if (request.method === "POST" && url.pathname === "/api/thermals/verify") {
-    const body = (await request.json().catch(() => null)) as {
-      dateIso?: unknown;
-      hour?: unknown;
-      cellId?: unknown;
-    } | null;
-
+    if (!secret) return json(503, { error: "Thermal reports are not set up on this server." });
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const dateIso = typeof body?.dateIso === "string" ? body.dateIso.trim() : "";
-    const hour = typeof body?.hour === "number" ? body.hour : Number(body?.hour);
-    const cellId = typeof body?.cellId === "number" ? body.cellId : Number(body?.cellId);
+    const hour = Number(body?.hour);
+    const cellId = Number(body?.cellId);
+    const device = typeof body?.device === "string" ? body.device : "";
 
-    if (!DATE_ISO_RE.test(dateIso)) {
-      return json(400, { error: "invalid dateIso (expected YYYY-MM-DD)" });
-    }
+    if (!DATE_ISO_RE.test(dateIso)) return json(400, { error: "invalid dateIso (expected YYYY-MM-DD)" });
     if (!Number.isInteger(hour) || hour < MIN_HOUR || hour > MAX_HOUR) {
       return json(400, { error: `invalid hour (expected integer ${MIN_HOUR}..${MAX_HOUR})` });
     }
     if (!Number.isInteger(cellId) || cellId < MIN_CELL_ID || cellId > MAX_CELL_ID) {
       return json(400, { error: `invalid cellId (expected integer ${MIN_CELL_ID}..${MAX_CELL_ID})` });
     }
+    if (!DEVICE_RE.test(device)) return json(400, { error: "invalid device id" });
     if (!isPastBoiseHour(dateIso, hour, nowMs)) {
-      return json(400, {
-        error: "Thermal verification is only allowed for hours that have already passed.",
-        isPastHour: false,
-      });
+      return json(400, { error: "Thermals can only be reported for hours that have already passed.", isPastHour: false });
     }
 
-    const clientIp = getClientIp(request);
-    const doc = await readDayDocument(bucket, dateIso);
-    const hourKey = String(hour);
-    const hourRec: HourVerificationRecord = doc.hours[hourKey] ?? { entries: [], countsByCell: {} };
+    const prefix = hourPrefix(dateIso, hour);
+    const networkKey = await digest(secret, dateIso, "network", clientIp(request));
+    const deviceKey = await digest(secret, dateIso, "device", device);
+    const key = `${prefix}${networkKey}.${deviceKey}`;
 
-    const existing = hourRec.entries.find((e) => e.ip === clientIp);
-    if (existing) {
-      return json(409, {
-        error: "You have already verified a thermal for this hour.",
-        dateIso,
-        hour,
-        userVerified: true,
-        userVerifiedCellId: existing.cellId,
-        countsByCell: hourRec.countsByCell,
-        totalVerifications: hourRec.entries.length,
-      });
+    const fromNetwork = await listHour(bucket, `${prefix}${networkKey}.`);
+    const isUpdate = fromNetwork.some((o) => o.key === key);
+    if (!isUpdate && fromNetwork.length >= MAX_REPORTS_PER_NETWORK) {
+      return json(429, { error: "Too many reports from this network for this hour." });
     }
 
-    const timestamp = new Date(nowMs).toISOString();
-    hourRec.entries.push({
-      cellId,
-      ip: clientIp,
-      timestamp,
-    });
-    const cellKey = String(cellId);
-    hourRec.countsByCell[cellKey] = (hourRec.countsByCell[cellKey] ?? 0) + 1;
-    doc.hours[hourKey] = hourRec;
-
-    await bucket.put(verificationKey(dateIso), JSON.stringify(doc), {
-      httpMetadata: { contentType: "application/json", cacheControl: "no-store" },
-    });
-
-    return json(200, {
-      ok: true,
-      dateIso,
-      hour,
-      cellId,
-      timestamp,
-      userVerified: true,
-      userVerifiedCellId: cellId,
-      countsByCell: hourRec.countsByCell,
-      totalVerifications: hourRec.entries.length,
-    });
+    await bucket.put(key, "", { customMetadata: { cellId: String(cellId) } });
+    const summary = summarize(await listHour(bucket, prefix), prefix, deviceKey);
+    return json(200, { ok: true, dateIso, hour, cellId, ...summary });
   }
 
   return json(405, { error: "method not allowed" }, { allow: "GET, POST" });
 }
-
