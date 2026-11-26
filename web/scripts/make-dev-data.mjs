@@ -8,7 +8,7 @@
 //
 // Usage: node scripts/make-dev-data.mjs [--out dev-data]
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
@@ -26,6 +26,7 @@ import { nearestStation } from "../../forecasts/scripts/lib/raob.mjs";
 import { buildSolarTerrain, domainFor, expandBounds, gridFromFunction, metresPerDegree } from "../../forecasts/scripts/lib/solar.mjs";
 import { ALOFT_FIELDS, SURFACE_FIELDS, buildManifest as buildEcmwfManifest, buildSiteDocument as buildEcmwfDocument, paths as ecmwfPaths } from "../../forecasts/scripts/lib/ecmwf.mjs";
 import { SCHEMA_VERSION as STATION_SCHEMA, SOURCE as STATION_SOURCE, dashboardUrl, parseWuCurrent, parseWuHistory } from "../src/lib/station.ts";
+import { parseThermalPayload } from "../src/lib/thermals.ts";
 
 const { values: args } = parseArgs({ options: { out: { type: "string", default: "dev-data" } } });
 const out = resolve(args.out);
@@ -510,18 +511,78 @@ for (const site of sites.sites) {
   }
 }
 
-// Thermal prediction dataset (Boise domain): copy into dev-data only (never public/data).
+// The Boise thermal map: made-up probabilities on the real terrain grid, higher
+// on steep sunny slopes in the afternoon, for today and yesterday whatever the
+// season. Running thermals/pipeline.py afterwards replaces it with a real one.
 {
-  const candidates = [
-    new URL("../../thermals/data/forecast_predictions.json", import.meta.url),
-    new URL("../../../thermal_predicion/web/static/forecast_predictions.json", import.meta.url),
-  ];
-  const thermalSrc = candidates.find((u) => existsSync(u));
-  if (thermalSrc) {
-    const destDev = join(out, "thermal_predictions.json");
-    mkdirSync(dirname(destDev), { recursive: true });
-    copyFileSync(thermalSrc, destDev);
-  }
+  const cells = readJson("../../thermals/data/boise_terrain_grid.json");
+  const tz = "America/Boise";
+  const now = Date.now();
+  const midnight = localMidnight(tz, now);
+  const day = (offset) => {
+    const t = midnight + offset * 24 * HOUR + 12 * HOUR;
+    const date = new Date(t);
+    const iso = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+    const display = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", month: "short", day: "numeric" }).format(date);
+    const hours = [];
+    for (let h = 8; h <= 20; h++) {
+      const heat = Math.max(0, Math.sin((Math.PI * (h - 7)) / 14)); // 0 at 7 AM and 9 PM, 1 at 2 PM
+      const sunAz = (90 + (h - 6) * 15) % 360;
+      const absorbed = cells.map((c) => {
+        const facing = Math.max(0, Math.cos(((c.mean_aspect - sunAz) * Math.PI) / 180));
+        return Math.round(heat * (40 + 50 * facing * Math.min(1, c.mean_slope / 25)));
+      });
+      const base = cells.map((c, i) => Math.min(0.95, 0.1 + 0.5 * (absorbed[i] / 100) + 0.25 * Math.min(1, c.elevation_delta / 600)));
+      hours.push({
+        hour_local: h,
+        valid_time_iso: new Date(midnight + offset * 24 * HOUR + h * HOUR).toISOString(),
+        local_time_display: `${((h + 11) % 12) + 1}:00 ${h < 12 ? "AM" : "PM"}`,
+        is_daylight: true,
+        sun_elevation_deg: Math.round(60 * heat * 10) / 10,
+        weather_summary: {
+          temp_c: Math.round((10 + 15 * heat) * 10) / 10,
+          dew_c: 2,
+          wind_speed_mph: 6,
+          wind_dir_deg: 300,
+          cape_jkg: Math.round(300 * heat),
+          blh_m: Math.round(500 + 2000 * heat),
+          sensible_heat_wm2: Math.round(350 * heat),
+          net_radiation_wm2: Math.round(600 * heat),
+        },
+        inputs_outside_training: h === 20 ? ["env_lapse_rate_11000"] : [],
+        lightgbm: base.map((p) => Math.round(1000 * Math.min(1, p * (0.4 + 0.6 * heat)))),
+        xgboost: base.map((p) => Math.round(1000 * Math.min(1, p * (0.35 + 0.6 * heat)))),
+        absorbed,
+      });
+    }
+    return { date_iso: iso, date_display: display, supported: true, hours };
+  };
+  write(
+    "thermal_predictions.json",
+    {
+      schema: 2,
+      metadata: {
+        model_run: "sample",
+        retrieved_at_utc: new Date(now).toISOString(),
+        retrieved_at_local: "sample data",
+        thresholds: { low: 0.35, high: 0.5 },
+        grid_resolution_deg: 0.015,
+        season: { first_month: 3, last_month: 9 },
+        sample: true,
+      },
+      cells: cells.map((c) => ({
+        id: c.id,
+        lat: c.lat,
+        lon: c.lon,
+        elevation: Math.round(c.elevation),
+        slope: Math.round(c.mean_slope * 10) / 10,
+        aspect: Math.round(c.mean_aspect),
+        zone: c.zone,
+      })),
+      days: { today: day(0), yesterday: day(-1) },
+    },
+    parseThermalPayload,
+  );
 }
 
 console.log(`✓ Sample dataset for ${sites.sites.length} launch(es) written to ${out}`);

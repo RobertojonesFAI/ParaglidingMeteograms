@@ -1,6 +1,5 @@
 """
-Configuration settings for Thermal Prediction Engine (Boise Domain).
-Self-contained inside ParaglidingMeteograms/thermals for local and CI execution.
+Settings for the Boise thermal prediction pipeline.
 """
 
 from pathlib import Path
@@ -10,54 +9,39 @@ REPO_ROOT = BASE_DIR.parent
 MODELS_DIR = BASE_DIR / "models"
 DATA_DIR = BASE_DIR / "data"
 
-# Optional local DEM files (only used if force_recompute=True; normal runs use boise_terrain_grid.json)
-BOISE_DEM_PATH = REPO_ROOT.parent / "dems" / "boise" / "Boise_merged_full.tif"
-BOISE_ALBEDO_PATH = REPO_ROOT.parent / "dems" / "boise" / "albedo_boise.tif"
-
-# Model artifacts
+# Trained models. The scaler's medians are not used for prediction (tree models
+# need no scaling); tests use them to check the input formulas against training.
 LGBM_WEIGHTS = MODELS_DIR / "best_lightgbm.txt"
 XGB_WEIGHTS = MODELS_DIR / "best_xgboost.json"
 SCALER_STATS = MODELS_DIR / "scaler_stats.json"
 
-# Precomputed 690-cell topography grid and local forecast cache
+# The 690-cell terrain grid (0.015° ≈ 1.6 km) the map shows. The website reads
+# the same file to decide which launches are inside the map.
 TERRAIN_CACHE_FILE = DATA_DIR / "boise_terrain_grid.json"
 FORECAST_CACHE_FILE = DATA_DIR / "forecast_predictions.json"
+GRID_RESOLUTION_DEG = 0.015
 
-# Local dev-data output (gitignored; production serves from R2 at /data/thermal_predictions.json)
+# Local copy for `pnpm dev` (web/dev-data is gitignored); production serves the
+# R2 object at /data/thermal_predictions.json.
 METEOGRAMS_WEB_DIR = REPO_ROOT / "web"
 METEOGRAMS_DEV_DATA_DIR = METEOGRAMS_WEB_DIR / "dev-data"
 METEOGRAMS_DEV_FORECAST_FILE = METEOGRAMS_DEV_DATA_DIR / "thermal_predictions.json"
 
-# R2 bucket object key
 R2_FORECAST_KEY = "thermal_predictions.json"
 
-# Spatial domain: Boise, Idaho and surrounding foothills / Bogus Basin / Lucky Peak
-MIN_LAT = 43.48
-MAX_LAT = 43.82
-MIN_LON = -116.34
-MAX_LON = -115.90
-GRID_RESOLUTION_DEG = 0.015  # ~1.6 km resolution (690 cells)
-
-# Center reference coordinate for Boise
+# Solar geometry is computed at the domain's centre.
 BOISE_CENTER_LAT = 43.6150
 BOISE_CENTER_LON = -116.2023
 BOISE_TIMEZONE = "America/Boise"
 
-# Daytime soaring window (8:00 AM to 8:00 PM local time, 13 hours)
+# The forecast hours shown each day (local time), 8 AM to 8 PM.
 DAYTIME_HOURS_LOCAL = list(range(8, 21))
-FORECAST_HORIZON_HOURS = 13
 
-# Classification thresholds
+# Default probability cutoffs for the map's colours; visitors can change them.
 LOW_THRESHOLD = 0.35
 HIGH_THRESHOLD = 0.50
 
-COLOR_LOW = "#ef4444"    # Red
-COLOR_MED = "#eab308"    # Yellow
-COLOR_HIGH = "#22c55e"   # Green
-
-MODELS = ["ensemble", "lightgbm", "xgboost"]
-
-# Exact 42 feature names and sequence used by LightGBM & XGBoost
+# The 42 model inputs, in the order the models take them.
 CURATED_CORE_FEATURES = [
     "TOL_8000", "TOL_1000", "u_wind_6500", "u_wind_2000", "v_wind_7000", "v_wind_2000",
     "temperature_8000", "temperature_2500", "pressure_10000", "pressure_2500",
@@ -69,4 +53,3 @@ CURATED_CORE_FEATURES = [
     "max_elevation", "mean_aspect", "mean_slope", "month", "neighbor_max_elevation",
     "orog_subh", "slope_x_solar", "solar_x_south_facing", "south_facing_fraction",
 ]
-

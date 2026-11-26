@@ -1,118 +1,81 @@
 """
-Multi-Model Inference Engine for Thermatics.
-Loads trained LightGBM and XGBoost models, processes 42 curated features,
-and outputs calibrated thermal probability and risk tiers (Low, Medium, High).
+Runs the trained LightGBM and XGBoost models on the 42 inputs.
+
+The models were trained on data covering a limited range of each input; the
+LightGBM model file records that range for every input (`feature_infos`).
+Tree models do not extrapolate: an input beyond its training range is treated
+as if it were at the edge of the range. So inputs outside the range are reported
+with each hour, and the months the models never saw are not forecast at all
+(see `season_supported`).
 """
 
-import json
 import logging
+import re
+
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
 import xgboost as xgb
 
-try:
-    from .config import (
-        LGBM_WEIGHTS,
-        XGB_WEIGHTS,
-        SCALER_STATS,
-        CURATED_CORE_FEATURES,
-        LOW_THRESHOLD,
-        HIGH_THRESHOLD,
-        COLOR_LOW,
-        COLOR_MED,
-        COLOR_HIGH,
-    )
-except ImportError:
-    from config import (
-        LGBM_WEIGHTS,
-        XGB_WEIGHTS,
-        SCALER_STATS,
-        CURATED_CORE_FEATURES,
-        LOW_THRESHOLD,
-        HIGH_THRESHOLD,
-        COLOR_LOW,
-        COLOR_MED,
-        COLOR_HIGH,
-    )
+from .config import LGBM_WEIGHTS, XGB_WEIGHTS, CURATED_CORE_FEATURES
+
+# An hour lists an input as outside the training range when more than this
+# share of the cells have it outside.
+OUT_OF_RANGE_REPORT_SHARE = 0.2
+
+
+def training_ranges(model_file=LGBM_WEIGHTS) -> dict[str, tuple[float, float]]:
+    """The [min, max] of every input in the training data, from the LightGBM model file."""
+    text = model_file.read_text()
+    match = re.search(r"^feature_infos=(.*)$", text, re.M)
+    if not match:
+        raise ValueError(f"{model_file.name} has no feature_infos line")
+    infos = match.group(1).split()
+    if len(infos) != len(CURATED_CORE_FEATURES):
+        raise ValueError(f"{model_file.name} has {len(infos)} inputs; config lists {len(CURATED_CORE_FEATURES)}")
+    ranges = {}
+    for name, info in zip(CURATED_CORE_FEATURES, infos):
+        low, high = info.strip("[]").split(":")
+        ranges[name] = (float(low), float(high))
+    return ranges
 
 
 class ThermalPredictor:
-    """
-    Manages model loading and prediction for LightGBM, XGBoost, and Ensemble.
-    """
-
     def __init__(self):
-        self.lgbm_model = None
-        self.xgb_model = None
-        self.feature_medians = {}
-        self._load_reference_medians()
-        self._load_models()
-
-    def _load_reference_medians(self):
-        if SCALER_STATS.exists():
-            with open(SCALER_STATS, "r") as f:
-                data = json.load(f)
-                self.feature_medians = data.get("centers", {})
-                logging.info(f"Loaded {len(self.feature_medians)} reference medians from {SCALER_STATS.name}")
-
-    def _load_models(self):
-        if not LGBM_WEIGHTS.exists():
-            raise FileNotFoundError(f"LightGBM weights not found at {LGBM_WEIGHTS}")
+        self.ranges = training_ranges()
         self.lgbm_model = lgb.Booster(model_file=str(LGBM_WEIGHTS))
-        logging.info(f"Loaded LightGBM model from {LGBM_WEIGHTS.name} ({self.lgbm_model.num_trees()} trees)")
-
-        if not XGB_WEIGHTS.exists():
-            raise FileNotFoundError(f"XGBoost weights not found at {XGB_WEIGHTS}")
         self.xgb_model = xgb.Booster()
         self.xgb_model.load_model(str(XGB_WEIGHTS))
-        logging.info(f"Loaded XGBoost model from {XGB_WEIGHTS.name}")
+        for name, count in (("LightGBM", self.lgbm_model.num_feature()), ("XGBoost", self.xgb_model.num_features())):
+            if count != len(CURATED_CORE_FEATURES):
+                raise ValueError(f"{name} model takes {count} inputs; config lists {len(CURATED_CORE_FEATURES)}")
+        logging.info(f"Loaded LightGBM ({self.lgbm_model.num_trees()} trees) and XGBoost models")
 
-    def format_classification(self, prob: float, low_thresh: float = LOW_THRESHOLD, high_thresh: float = HIGH_THRESHOLD):
-        prob_val = float(prob)
-        if prob_val < low_thresh:
-            return {"level": "low", "label": "Low Thermal Chance", "color": COLOR_LOW, "badge": "Low"}
-        if prob_val < high_thresh:
-            return {"level": "medium", "label": "Medium Thermal Chance", "color": COLOR_MED, "badge": "Medium"}
-        return {"level": "high", "label": "High Thermal Chance", "color": COLOR_HIGH, "badge": "High"}
+    def season_supported(self, month: int) -> bool:
+        """Whether the models saw this month in training."""
+        low, high = self.ranges["month"]
+        return low <= month <= high
 
-    def predict_dataframe(
-        self,
-        df_features: pd.DataFrame,
-        low_thresh: float = LOW_THRESHOLD,
-        high_thresh: float = HIGH_THRESHOLD,
-    ) -> list:
-        X = pd.DataFrame(index=df_features.index)
-        for feat in CURATED_CORE_FEATURES:
-            if feat in df_features.columns:
-                X[feat] = pd.to_numeric(df_features[feat], errors="coerce")
-            else:
-                X[feat] = self.feature_medians.get(feat, 0.0)
+    def inputs_outside_training(self, features: pd.DataFrame) -> list[str]:
+        """The inputs that more than OUT_OF_RANGE_REPORT_SHARE of the cells have outside the training range."""
+        out = []
+        for name in CURATED_CORE_FEATURES:
+            low, high = self.ranges[name]
+            values = features[name].to_numpy(dtype=float)
+            if np.mean((values < low) | (values > high)) > OUT_OF_RANGE_REPORT_SHARE:
+                out.append(name)
+        return out
 
-            if X[feat].isna().any():
-                X[feat] = X[feat].fillna(self.feature_medians.get(feat, 0.0))
-
-        n_samples = len(X)
-        lgbm_probs = self.lgbm_model.predict(X.values)
-        dmat = xgb.DMatrix(X.values)
-        xgb_probs = self.xgb_model.predict(dmat)
-        ens_probs = 0.5 * lgbm_probs + 0.5 * xgb_probs
-
-        results = []
-        for i in range(n_samples):
-            p_lgb = float(np.clip(lgbm_probs[i], 0.0, 1.0))
-            p_xgb = float(np.clip(xgb_probs[i], 0.0, 1.0))
-            p_ens = float(np.clip(ens_probs[i], 0.0, 1.0))
-
-            c_lgb = self.format_classification(p_lgb, low_thresh, high_thresh)
-            c_xgb = self.format_classification(p_xgb, low_thresh, high_thresh)
-            c_ens = self.format_classification(p_ens, low_thresh, high_thresh)
-
-            results.append({
-                "lightgbm": {"probability": round(p_lgb, 4), "percentage": round(p_lgb * 100.0, 1), **c_lgb},
-                "xgboost": {"probability": round(p_xgb, 4), "percentage": round(p_xgb * 100.0, 1), **c_xgb},
-                "ensemble": {"probability": round(p_ens, 4), "percentage": round(p_ens * 100.0, 1), **c_ens},
-            })
-
-        return results
-
+    def predict(self, features: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+        """LightGBM and XGBoost probabilities, one per row. Every input must be
+        present and finite: a guessed value would give a plausible but wrong map."""
+        missing = [name for name in CURATED_CORE_FEATURES if name not in features.columns]
+        if missing:
+            raise ValueError(f"missing model inputs: {', '.join(missing)}")
+        X = features[CURATED_CORE_FEATURES].to_numpy(dtype=float)
+        bad = [name for name, ok in zip(CURATED_CORE_FEATURES, np.isfinite(X).all(axis=0)) if not ok]
+        if bad:
+            raise ValueError(f"non-finite model inputs: {', '.join(bad)}")
+        lgbm = np.clip(self.lgbm_model.predict(X), 0.0, 1.0)
+        xgbm = np.clip(self.xgb_model.predict(xgb.DMatrix(X)), 0.0, 1.0)
+        return lgbm, xgbm

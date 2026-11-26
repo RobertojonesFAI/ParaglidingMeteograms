@@ -86,13 +86,18 @@ import Base from "../layouts/Base.astro";
     </section>
 
     <section class="card">
-      <h2>Thermal prediction map (Boise domain)</h2>
+      <h2>Thermal map (Boise, experimental)</h2>
       <p style="margin-top:8px">
-        The <a href="/thermals">Thermal Map</a> combines NOAA HRRR atmospheric soundings (lapse rates, boundary-layer height,
-        CAPE, wind shear, and surface heat fluxes) with terrain elevation, slope, aspect, albedo, and solar geometry to predict
-        thermal generation probability across 690 grid cells (~1.6 km resolution) over the next 12 hours. You can compare three
-        models side by side — LightGBM, XGBoost, and their Ensemble Consensus — and click any cell to inspect its topography
-        and atmospheric forcing.
+        The <a href="/thermals">Thermal Map</a> gives the chance of thermals each hour from 8 AM to 8 PM on 690 cells of
+        about 1.6 km around Boise. Two machine-learning models (LightGBM and XGBoost), trained on past data, read the
+        NOAA HRRR forecast for each cell (soundings, boundary-layer height, CAPE, wind, surface heating) together with the
+        cell's slope, facing, elevation and the sun; the ensemble is their mean. The models learned mostly from terrain,
+        so they say more about where thermals tend to form than about how strong a given day will be.
+      </p>
+      <p style="margin-top:8px">
+        They were trained on data from March to September, so the map shows no forecast in the other months, and it
+        flags the hours when the weather is outside what the models saw. Hours that have passed keep the forecast they
+        had, so pilots can report where they actually found a thermal; reports store no IP address.
       </p>
     </section>
 
